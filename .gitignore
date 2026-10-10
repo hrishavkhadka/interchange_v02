@@ -2,7 +2,7 @@
 .godot/
 
 # Build output
-build/
+/build/
 export/
 *.exe
 *.pck
