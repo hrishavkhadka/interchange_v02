@@ -2,7 +2,6 @@ class_name SnapResolver
 extends RefCounted
 
 const NODE_SNAP_RADIUS: float = 5.0
-const WAYPOINT_SNAP_RADIUS: float = 2.0
 const ANGLE_TOLERANCE_DEG: float = 9.0
 const GUIDE_SNAP_RADIUS: float = 2.5
 
@@ -10,9 +9,7 @@ static func resolve_position(raw: Vector3, settings: BuildSettings, road_type: R
 	if settings.snap_node:
 		var n := RoadGraph.find_nearest(raw, NODE_SNAP_RADIUS)
 		if n != null:
-			var effective: float = WAYPOINT_SNAP_RADIUS if n.is_pass_through() else NODE_SNAP_RADIUS
-			if n.position.distance_to(raw) <= effective:
-				return { "point": n.position, "kind": "node", "t_segment": null, "guide_dir": null }
+			return { "point": n.position, "kind": "node", "t_segment": null, "guide_dir": null }
 
 	if settings.snap_segment:
 		var s: Variant = RoadOps.find_segment_under_point(raw)

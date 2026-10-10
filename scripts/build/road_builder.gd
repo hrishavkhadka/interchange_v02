@@ -9,7 +9,6 @@ enum Mode { POINTER = 0, ROAD = 1, DEMOLISH = 2, REVERSE = 3 }
 const MIN_BEND_DOT: float = 0.87
 const WAYPOINT_SPACING_LANES: float = 30.0
 const DEMOLISH_PICK_RADIUS: float = 3.5
-const WAYPOINT_ABSORB_RADIUS: float = 10.0
 
 const ROAD_TYPE_DEFS := [
 	{ "id": "fb",       "name": "2-lane two-way",   "layout": "FB" },
@@ -133,9 +132,6 @@ func _begin() -> void:
 	var hit: Vector3 = hit_raw
 	var r := SnapResolver.resolve_position(hit, settings, road_type)
 	var rp: Vector3 = r["point"]
-	# Before committing the start node, absorb any nearby waypoint.
-	if r["kind"] != "node":
-		_absorb_nearby_waypoints(rp)
 	_drawing = true
 	_start = rp
 	_start_t_segment = r["t_segment"]
@@ -217,10 +213,6 @@ func _end() -> void:
 		_start_t_segment = null
 		_start_guide_dir = null
 		return
-	# Absorb nearby waypoints before doing any splitting. The graph gets a
-	# cleaner topology and the segment we split is the merged one.
-	if end_ts != null:
-		_absorb_nearby_waypoints(end_pos)
 	if _start_t_segment != null:
 		_split_existing_segment(_start_t_segment, _start)
 	if end_ts != null:
@@ -262,43 +254,6 @@ func _update_hover() -> void:
 	var r := SnapResolver.resolve_position(hit, settings, road_type)
 	var rp: Vector3 = r["point"]
 	_snap_indicator.show_at(rp)
-
-# ------------------------------------------------------------ waypoint absorb
-
-func _absorb_nearby_waypoints(pos: Vector3) -> void:
-	var to_remove: Array[RoadNode] = []
-	for n in RoadGraph.nodes:
-		if not n.is_waypoint:
-			continue
-		if n.segment_ends.size() != 2:
-			continue
-		var d: float = Vector2(n.position.x - pos.x, n.position.z - pos.z).length()
-		if d > WAYPOINT_ABSORB_RADIUS:
-			continue
-		to_remove.append(n)
-	for w in to_remove:
-		_remove_waypoint(w)
-
-func _remove_waypoint(w: RoadNode) -> void:
-	if w.segment_ends.size() != 2:
-		return
-	var seg_a: RoadSegment = w.segment_ends[0]["segment"]
-	var seg_b: RoadSegment = w.segment_ends[1]["segment"]
-	if seg_a == null or seg_b == null:
-		return
-	var a_is_start: bool = w.segment_ends[0]["is_start"]
-	var other_a: RoadNode = seg_a.end_node if a_is_start else seg_a.start_node
-	var b_is_start: bool = w.segment_ends[1]["is_start"]
-	var other_b: RoadNode = seg_b.end_node if b_is_start else seg_b.start_node
-	if other_a == null or other_b == null:
-		return
-	var rt: RoadType = seg_a.road_type
-	_detach_and_remove(seg_a)
-	_detach_and_remove(seg_b)
-	RoadGraph.nodes.erase(w)
-	_create_segment(other_a, other_b, rt)
-
-# ------------------------------------------------------------ demolish / reverse
 
 func _exit_hover_mode() -> void:
 	if _hovered_segment != null and is_instance_valid(_hovered_segment):

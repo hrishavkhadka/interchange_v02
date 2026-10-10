@@ -2,9 +2,10 @@ class_name ArcRibbon
 extends Node3D
 
 const LIFT: float = 0.20
-const HALF_WIDTH_ENABLED: float = 0.14
-const SAMPLES_ENABLED: int = 40
-const SAMPLES_DISABLED: int = 24
+const HALF_WIDTH_ENABLED: float = 0.20
+const HALF_WIDTH_DISABLED: float = 0.12
+const SAMPLES: int = 32
+const DASH_PERIOD: int = 6
 
 var arc: LaneArc
 var _mesh: MeshInstance3D
@@ -31,59 +32,40 @@ func rebuild() -> void:
 		_mesh.mesh = null
 		_update_color()
 		return
-	if arc.enabled:
-		_build_ribbon(c, length)
-	else:
-		_build_thin_line(c, length)
-	_update_color()
-
-func _build_ribbon(c: Curve3D, length: float) -> void:
+	var hw: float = HALF_WIDTH_ENABLED if arc.enabled else HALF_WIDTH_DISABLED
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var samples: int = maxi(8, SAMPLES_ENABLED)
+	var samples: int = maxi(8, SAMPLES)
 	var prev_l: Vector3 = Vector3.ZERO
 	var prev_r: Vector3 = Vector3.ZERO
 	for i in range(samples + 1):
 		var t: float = float(i) / float(samples)
 		var along: float = t * length
 		var p: Vector3 = c.sample_baked(along)
-		var right: Vector3 = _right_at(c, along, length)
-		var l: Vector3 = p - right * HALF_WIDTH_ENABLED + Vector3(0.0, LIFT, 0.0)
-		var r: Vector3 = p + right * HALF_WIDTH_ENABLED + Vector3(0.0, LIFT, 0.0)
+		var ahead_d: float = minf(along + 0.2, length)
+		var behind_d: float = maxf(along - 0.2, 0.0)
+		var ahead: Vector3 = c.sample_baked(ahead_d)
+		var behind: Vector3 = c.sample_baked(behind_d)
+		var tangent: Vector3 = ahead - behind
+		tangent.y = 0.0
+		if tangent.length_squared() < 0.0001:
+			tangent = Vector3.FORWARD
+		tangent = tangent.normalized()
+		var right: Vector3 = tangent.cross(Vector3.UP)
+		if right.length_squared() < 0.0001:
+			right = Vector3.RIGHT
+		right = right.normalized()
+		var l: Vector3 = p - right * hw + Vector3(0.0, LIFT, 0.0)
+		var r: Vector3 = p + right * hw + Vector3(0.0, LIFT, 0.0)
 		if i > 0:
-			_tri(st, prev_l, prev_r, l)
-			_tri(st, prev_r, r, l)
+			var draw: bool = arc.enabled or ((i / DASH_PERIOD) % 2 == 0)
+			if draw:
+				_tri(st, prev_l, prev_r, l)
+				_tri(st, prev_r, r, l)
 		prev_l = l
 		prev_r = r
 	_mesh.mesh = st.commit()
-
-func _build_thin_line(c: Curve3D, length: float) -> void:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_LINES)
-	var samples: int = maxi(8, SAMPLES_DISABLED)
-	var prev: Vector3 = c.sample_baked(0.0) + Vector3(0.0, LIFT, 0.0)
-	for i in range(1, samples + 1):
-		var t: float = float(i) / float(samples)
-		var p: Vector3 = c.sample_baked(t * length) + Vector3(0.0, LIFT, 0.0)
-		st.add_vertex(prev)
-		st.add_vertex(p)
-		prev = p
-	_mesh.mesh = st.commit()
-
-func _right_at(c: Curve3D, along: float, length: float) -> Vector3:
-	var ahead_d: float = minf(along + 0.2, length)
-	var behind_d: float = maxf(along - 0.2, 0.0)
-	var ahead: Vector3 = c.sample_baked(ahead_d)
-	var behind: Vector3 = c.sample_baked(behind_d)
-	var tangent: Vector3 = ahead - behind
-	tangent.y = 0.0
-	if tangent.length_squared() < 0.0001:
-		tangent = Vector3.FORWARD
-	tangent = tangent.normalized()
-	var right: Vector3 = tangent.cross(Vector3.UP)
-	if right.length_squared() < 0.0001:
-		right = Vector3.RIGHT
-	return right.normalized()
+	_update_color()
 
 func _update_color() -> void:
 	if _material == null:
@@ -91,7 +73,7 @@ func _update_color() -> void:
 	if arc != null and arc.enabled:
 		_material.albedo_color = Color(0.25, 0.95, 0.35, 0.9)
 	else:
-		_material.albedo_color = Color(0.95, 0.25, 0.25, 0.9)
+		_material.albedo_color = Color(0.95, 0.25, 0.25, 0.55)
 
 func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
 	st.set_normal(Vector3.UP)
@@ -108,7 +90,7 @@ func distance_to_point(p: Vector3) -> float:
 	var length: float = c.get_baked_length()
 	if length < 0.1:
 		return INF
-	var samples: int = maxi(4, 32)
+	var samples: int = maxi(4, SAMPLES)
 	var best: float = INF
 	for i in range(samples + 1):
 		var t: float = float(i) / float(samples)
