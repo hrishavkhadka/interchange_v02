@@ -30,7 +30,7 @@ func _rebuild() -> void:
 			continue
 		var start_trim: float = trims.get(seg.start_node.id, 0.0)
 		var end_trim: float = trims.get(seg.end_node.id, 0.0)
-		var layout := seg.road_type.layout()
+		var layout: LaneLayout = seg.road_type.layout()
 		for i in layout.size():
 			var dir: String = layout.lanes[i]
 			var lane := _make_lane(seg, i, dir, start_trim, end_trim)
