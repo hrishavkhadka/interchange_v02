@@ -4,7 +4,7 @@ extends Node3D
 signal cost_changed(total_cost: float)
 signal road_type_changed(index: int, name: String)
 
-enum Mode { POINTER = 0, ROAD = 1, DEMOLISH = 2, REVERSE = 3 }
+enum Mode { POINTER = 0, ROAD = 1, DEMOLISH = 2, REVERSE = 3, UPDATE = 4 }
 
 const MIN_BEND_DOT: float = 0.87
 const WAYPOINT_SPACING_LANES: float = 30.0
@@ -92,9 +92,7 @@ func _process(_dt: float) -> void:
 			_update()
 		else:
 			_update_hover()
-	elif mode == Mode.DEMOLISH:
-		_demolish_hover()
-	elif mode == Mode.REVERSE:
+	elif mode == Mode.DEMOLISH or mode == Mode.REVERSE or mode == Mode.UPDATE:
 		_demolish_hover()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -112,6 +110,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_demolish_click()
 			elif mode == Mode.REVERSE:
 				_reverse_click()
+			elif mode == Mode.UPDATE:
+				_update_click()
 		elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed and _drawing:
 			_cancel()
 	elif event is InputEventKey:
@@ -215,8 +215,6 @@ func _end() -> void:
 		_start_guide_dir = null
 		return
 
-	# Absorb waypoints near the start, then split the (possibly merged)
-	# segment at the ORIGINAL start position.
 	if _start_t_segment != null:
 		var seg_after_start: Variant = _absorb_chain(_start_t_segment, _start)
 		if seg_after_start != null:
@@ -224,8 +222,6 @@ func _end() -> void:
 		else:
 			_start_t_segment = null
 
-	# Same for the end side. Re-locate the end segment first, because the
-	# start-side split may have changed the topology.
 	var end_seg: Variant = null
 	var reloc: Variant = RoadOps.find_segment_under_point(end_pos)
 	if reloc != null:
@@ -273,10 +269,6 @@ func _update_hover() -> void:
 
 # ------------------------------------------------------------ waypoint absorb
 
-# Repeatedly absorb waypoints at the endpoints of `seg` that are within
-# WAYPOINT_ABSORB_RADIUS of `pos`, following the merged segment each time.
-# Returns the final segment (possibly different from the input), or null
-# if the segment no longer exists.
 func _absorb_chain(seg: Variant, pos: Vector3) -> Variant:
 	var current: Variant = seg
 	var safety: int = 0
@@ -291,10 +283,6 @@ func _absorb_chain(seg: Variant, pos: Vector3) -> Variant:
 		current = merged
 	return current
 
-# Returns a waypoint node to absorb, or null. Only fires if:
-#  - seg is a RoadSegment,
-#  - one of its endpoints is a waypoint,
-#  - the endpoint is between 0.5 m and WAYPOINT_ABSORB_RADIUS of pos.
 func _find_absorb_waypoint(seg: Variant, pos: Vector3) -> RoadNode:
 	if seg == null:
 		return null
@@ -313,8 +301,6 @@ func _find_absorb_waypoint(seg: Variant, pos: Vector3) -> RoadNode:
 			return w
 	return null
 
-# Delete the waypoint, merge its two adjacent segments into one. Returns
-# the newly created merged segment, or null on failure.
 func _absorb_waypoint(w: RoadNode) -> RoadSegment:
 	if w == null:
 		return null
@@ -343,7 +329,7 @@ func _absorb_waypoint(w: RoadNode) -> RoadSegment:
 	RoadGraph.nodes.erase(w)
 	return _create_segment(other_a, other_b, rt)
 
-# ------------------------------------------------------------ demolish / reverse
+# ------------------------------------------------------------ demolish / reverse / update
 
 func _exit_hover_mode() -> void:
 	if _hovered_segment != null and is_instance_valid(_hovered_segment):
@@ -386,6 +372,38 @@ func _reverse_click() -> void:
 	RoadGraph.graph_changed.emit()
 	_rebuild_neighbours(seg.start_node, seg)
 	_rebuild_neighbours(seg.end_node, seg)
+
+func _update_click() -> void:
+	var seg := _find_segment_under_cursor()
+	if seg == null:
+		return
+	if road_type == null or seg.road_type == null:
+		return
+	# No-op if the type is identical.
+	if seg.road_type.lane_layout_string == road_type.lane_layout_string \
+			and is_equal_approx(seg.road_type.lane_width, road_type.lane_width) \
+			and is_equal_approx(seg.road_type.speed_limit_kmh, road_type.speed_limit_kmh):
+		return
+	# Replace the road type, keep the curve. Lanes, arcs, and the slab all
+	# rebuild from this.
+	seg.setup(road_type, seg.curve)
+	# Clear arc overrides at both endpoints; lane indices may have shifted.
+	_clear_node_arc_overrides(seg.start_node)
+	_clear_node_arc_overrides(seg.end_node)
+	RoadGraph.graph_changed.emit()
+	_rebuild_neighbours(seg.start_node, seg)
+	_rebuild_neighbours(seg.end_node, seg)
+	cost_changed.emit(total_cost())
+
+func _clear_node_arc_overrides(node: RoadNode) -> void:
+	if node == null:
+		return
+	var node_arcs: Array = LaneGraph.arcs_by_node.get(node.id, [])
+	for a_v in node_arcs:
+		var arc: LaneArc = a_v
+		if arc.from_lane == null or arc.to_lane == null:
+			continue
+		ArcOverrides.set_disabled(node, arc.from_lane, arc.to_lane, false)
 
 func _find_segment_under_cursor() -> RoadSegment:
 	var hit_raw: Variant = _ground_hit()
@@ -528,8 +546,6 @@ func _sharing_nodes(start: Vector3, end: Vector3, t_targets: Array = []) -> Arra
 	var ne := RoadGraph.find_nearest(end, 1.0)
 	if ne != null:
 		result.append(ne)
-	# Include endpoints of any T-target segment. This prevents a segment
-	# adjacent at a shared waypoint from being falsely flagged as overlapping.
 	for t in t_targets:
 		var ts: RoadSegment = t
 		if ts == null:

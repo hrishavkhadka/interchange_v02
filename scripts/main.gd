@@ -8,10 +8,13 @@ var _snap_toolbar: SnapToolbar
 var _road_type_menu: RoadTypeMenu
 var _level_data_panel: LevelDataPanel
 var _main_toolbar: MainToolbar
-var _save_dialog: ConfirmationDialog
-var _save_field: LineEdit
-var _load_dialog: ConfirmationDialog
-var _load_field: LineEdit
+
+func _toolbar_to_builder_mode(tm: int) -> int:
+	if tm == 4 or tm == 5:
+		return 0
+	if tm == 6:
+		return 4
+	return tm
 
 func _ready() -> void:
 	_setup_environment()
@@ -80,8 +83,6 @@ func _ready() -> void:
 	_main_toolbar.name = "MainToolbar"
 	add_child(_main_toolbar)
 
-	_build_dialogs()
-
 	var snap_expanded: bool = false
 	var road_menu_expanded: bool = false
 	var level_data_expanded: bool = false
@@ -95,10 +96,12 @@ func _ready() -> void:
 		elif m == 5:
 			_builder.set_mode(0)
 			_marker_editor.set_active(true)
+		elif m == 6:
+			_builder.set_mode(4)
 		else:
 			_builder.set_mode(m)
 		_snap_toolbar.set_expanded(snap_expanded and (m == 1))
-		_road_type_menu.set_expanded(road_menu_expanded and (m == 1)))
+		_road_type_menu.set_expanded(road_menu_expanded and (m == 1 or m == 6)))
 
 	_main_toolbar.snapping_toggled.connect(func(on: bool) -> void:
 		snap_expanded = on
@@ -106,19 +109,20 @@ func _ready() -> void:
 
 	_main_toolbar.road_type_menu_toggled.connect(func(on: bool) -> void:
 		road_menu_expanded = on
-		_road_type_menu.set_expanded(on and (_main_toolbar.get_mode() == 1)))
+		var tm: int = _main_toolbar.get_mode()
+		_road_type_menu.set_expanded(on and (tm == 1 or tm == 6)))
 
 	_main_toolbar.level_data_toggled.connect(func(on: bool) -> void:
 		level_data_expanded = on
 		_level_data_panel.set_expanded(on and GameState.is_build()))
 
-	_builder.set_mode(_main_toolbar.get_mode())
+	_builder.set_mode(_toolbar_to_builder_mode(_main_toolbar.get_mode()))
 
 	GameState.state_changed.connect(func(s: int) -> void:
 		var build: bool = s == GameState.State.BUILD
 		_main_toolbar.set_interactive(build)
 		if build:
-			_builder.set_mode(_main_toolbar.get_mode())
+			_builder.set_mode(_toolbar_to_builder_mode(_main_toolbar.get_mode()))
 		else:
 			_builder.set_mode(0)
 			_junction_editor.set_active(false)
@@ -127,44 +131,11 @@ func _ready() -> void:
 		_road_type_menu.visible = build and road_menu_expanded
 		_level_data_panel.visible = build and level_data_expanded)
 
-func _build_dialogs() -> void:
-	_save_dialog = ConfirmationDialog.new()
-	_save_dialog.title = "Save Level"
-	_save_dialog.ok_button_text = "Save"
-	_save_field = LineEdit.new()
-	_save_field.text = "level_01"
-	_save_dialog.add_child(_save_field)
-	_save_dialog.confirmed.connect(func() -> void:
-		var path := LevelIO.save_level(_save_field.text)
-		print("[level] saved to ", path))
-	add_child(_save_dialog)
-
-	_load_dialog = ConfirmationDialog.new()
-	_load_dialog.title = "Load Level"
-	_load_dialog.ok_button_text = "Load"
-	_load_field = LineEdit.new()
-	_load_field.text = "level_01"
-	_load_dialog.add_child(_load_field)
-	_load_dialog.confirmed.connect(func() -> void:
-		var ok := LevelIO.load_level(_load_field.text)
-		print("[level] load result: ", ok))
-	add_child(_load_dialog)
-
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var ke := event as InputEventKey
 		if not ke.pressed or ke.echo:
 			return
-		if ke.ctrl_pressed:
-			match ke.keycode:
-				KEY_S:
-					_save_dialog.popup_centered()
-					get_viewport().set_input_as_handled()
-					return
-				KEY_O:
-					_load_dialog.popup_centered()
-					get_viewport().set_input_as_handled()
-					return
 		if GameState.is_build():
 			match ke.keycode:
 				KEY_1: _builder.set_road_type_index(0)

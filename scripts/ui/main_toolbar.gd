@@ -24,7 +24,7 @@ func _ready() -> void:
 	panel.anchor_top = 1.0
 	panel.anchor_bottom = 1.0
 	panel.offset_left = 16
-	panel.offset_right = 476
+	panel.offset_right = 506
 	panel.offset_top = -56
 	panel.offset_bottom = -16
 	add_child(panel)
@@ -39,6 +39,7 @@ func _ready() -> void:
 	_add_mode_button(row, "⇄", 3, "Reverse direction")
 	_add_mode_button(row, "◇", 4, "Edit lane connections")
 	_add_mode_button(row, "⚑", 5, "Mark entries and exits")
+	_add_mode_button(row, "⇅", 6, "Update road type")
 
 	var sep := VSeparator.new()
 	row.add_child(sep)
