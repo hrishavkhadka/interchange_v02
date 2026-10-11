@@ -76,6 +76,7 @@ func _serialize() -> Dictionary:
 			"is_entry": n.is_entry,
 			"is_exit": n.is_exit,
 			"map_label": n.map_label,
+			"forced_junction": n.forced_junction,
 			"demand": _demand_to_serializable(n, node_to_idx),
 		})
 
@@ -108,12 +109,10 @@ func _find_node_by_id(nid: int) -> RoadNode:
 	return null
 
 func _deserialize(data: Dictionary) -> void:
-	# 1. Wipe the graph.
 	_clear_graph()
 	ArcOverrides.clear()
 	RoadGraph.begin_batch()
 
-	# 2. Create nodes from indices.
 	var nodes_data: Array = data.get("nodes", [])
 	var created_nodes: Array[RoadNode] = []
 	for entry in nodes_data:
@@ -125,9 +124,9 @@ func _deserialize(data: Dictionary) -> void:
 		node.is_entry = bool(e.get("is_entry", false))
 		node.is_exit = bool(e.get("is_exit", false))
 		node.map_label = String(e.get("map_label", ""))
+		node.forced_junction = bool(e.get("forced_junction", false))
 		created_nodes.append(node)
 
-	# 3. Create segments.
 	var segments_data: Array = data.get("segments", [])
 	var seg_root := get_tree().current_scene.find_child("SegmentsRoot", true, false)
 	for entry in segments_data:
@@ -164,13 +163,11 @@ func _deserialize(data: Dictionary) -> void:
 		RoadGraph.register_segment(seg)
 		seg.rebuild_mesh()
 
-	# 4. Time limit and default target.
 	GameState.time_limit = float(data.get("time_limit", 90.0))
 	GameState.default_target_count = int(data.get("default_target_count", 40))
 	GameState.time_remaining = GameState.time_limit
 	GameState.target_count = GameState.default_target_count
 
-	# 5. Demand matrix.
 	for i in created_nodes.size():
 		var node: RoadNode = created_nodes[i]
 		if i < nodes_data.size():
@@ -183,7 +180,6 @@ func _deserialize(data: Dictionary) -> void:
 				var exit_node: RoadNode = created_nodes[idx]
 				node.demand[exit_node.id] = int(demand_raw[k])
 
-	# 6. Arc overrides (applied after nodes/segments are in place).
 	for o_v in data.get("arc_overrides", []):
 		var o: Dictionary = o_v
 		ArcOverrides.set_disabled_stable(
@@ -194,7 +190,6 @@ func _deserialize(data: Dictionary) -> void:
 			int(o.get("to_lane", 0)),
 			true)
 
-	# 7. Release batch. Fires graph_changed once.
 	RoadGraph.end_batch()
 
 func _clear_graph() -> void:
