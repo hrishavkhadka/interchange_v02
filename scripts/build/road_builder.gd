@@ -302,9 +302,9 @@ func _find_absorb_waypoint(seg: Variant, pos: Vector3) -> RoadNode:
 		return null
 	var s: RoadSegment = seg
 	var candidates: Array = []
-	if s.start_node != null and s.start_node.is_waypoint:
+	if s.start_node != null and s.start_node.is_pass_through():
 		candidates.append(s.start_node)
-	if s.end_node != null and s.end_node.is_waypoint:
+	if s.end_node != null and s.end_node.is_pass_through():
 		candidates.append(s.end_node)
 	for w_v in candidates:
 		var w: RoadNode = w_v
@@ -318,7 +318,7 @@ func _find_absorb_waypoint(seg: Variant, pos: Vector3) -> RoadNode:
 func _absorb_waypoint(w: RoadNode) -> RoadSegment:
 	if w == null:
 		return null
-	if not w.is_waypoint:
+	if not w.is_pass_through():
 		return null
 	if w.segment_ends.size() != 2:
 		return null
