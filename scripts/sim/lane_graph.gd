@@ -258,7 +258,7 @@ func _build_adjacency() -> void:
 
 const CONFLICT_DIST: float = 3.5
 const CONFLICT_SAMPLES: int = 30
-const PASS_THROUGH_TRIM: float = 2.0
+const PASS_THROUGH_TRIM: float = 4.0
 
 func _build_lane_conflicts() -> void:
 	var by_node: Dictionary = {}

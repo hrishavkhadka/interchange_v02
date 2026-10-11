@@ -56,7 +56,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-			_on_left_click()
+			_on_left_click(mb.shift_pressed)
 			get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
 			_close()
@@ -87,7 +87,7 @@ func _node_at(hit: Vector3) -> RoadNode:
 			best = n
 	return best
 
-func _on_left_click() -> void:
+func _on_left_click(shift: bool) -> void:
 	var dot := _pick_dot()
 	if not dot.is_empty():
 		_handle_dot_click(dot)
@@ -104,8 +104,16 @@ func _on_left_click() -> void:
 		return
 	var hit: Vector3 = pos_raw
 	var node := _node_at(hit)
-	if node != null:
-		_open(node)
+	if node == null:
+		return
+	if node.is_pass_through():
+		# Shift+click promotes a pass-through to a full junction.
+		if shift:
+			node.forced_junction = true
+			RoadGraph.graph_changed.emit()
+			_open(node)
+		return
+	_open(node)
 
 func _pick_dot() -> Dictionary:
 	var cam := get_viewport().get_camera_3d()
@@ -203,8 +211,6 @@ func _toggle_arc(arc: LaneArc) -> void:
 func _open(node: RoadNode) -> void:
 	_close()
 	if node == null:
-		return
-	if node.is_pass_through():
 		return
 	var node_arcs: Array = LaneGraph.arcs_by_node.get(node.id, [])
 	if node_arcs.is_empty():

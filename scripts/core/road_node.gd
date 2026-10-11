@@ -8,11 +8,13 @@ var position: Vector3
 var is_waypoint: bool = false
 var is_entry: bool = false
 var is_exit: bool = false
-# Short label like "E1" or "X2". Set when marking, cleared when unmarking.
 var map_label: String = ""
-# Only meaningful for entry nodes. Maps exit_node_id -> vehicle count.
 var demand: Dictionary = {}
 var segment_ends: Array = []
+# Set by the user (via the junction editor) to force this node to be treated
+# as a full junction even if its current geometry would classify it as a
+# pass-through.
+var forced_junction: bool = false
 
 func _init(p_position: Vector3, p_id: int) -> void:
 	position = p_position
@@ -25,6 +27,8 @@ func add_segment_end(seg: RoadSegment, is_start: bool) -> void:
 	segment_ends.append({ "segment": seg, "is_start": is_start })
 
 func is_pass_through() -> bool:
+	if forced_junction:
+		return false
 	if segment_ends.size() != 2:
 		return false
 	var dirs: Array[Vector3] = []
