@@ -9,6 +9,7 @@ enum Mode { POINTER = 0, ROAD = 1, DEMOLISH = 2, REVERSE = 3 }
 const MIN_BEND_DOT: float = 0.87
 const WAYPOINT_SPACING_LANES: float = 30.0
 const DEMOLISH_PICK_RADIUS: float = 3.5
+const WAYPOINT_ABSORB_RADIUS: float = 5.0
 
 const ROAD_TYPE_DEFS := [
 	{ "id": "fb",       "name": "2-lane two-way",   "layout": "FB" },
@@ -213,12 +214,45 @@ func _end() -> void:
 		_start_t_segment = null
 		_start_guide_dir = null
 		return
+
+	# --- START SIDE --------------------------------------------------------
+	# Absorb a nearby waypoint, then split the (possibly new) segment.
+	var absorb_start := _find_absorb_waypoint(_start_t_segment, _start)
+	if absorb_start != null:
+		_absorb_waypoint(absorb_start)
+		var recheck: Variant = RoadOps.find_segment_under_point(_start)
+		if recheck != null:
+			_start_t_segment = recheck["segment"]
+			var sp: Vector3 = recheck["point"]
+			_start = sp
+		else:
+			_start_t_segment = null
 	if _start_t_segment != null:
 		_split_existing_segment(_start_t_segment, _start)
-	if end_ts != null:
-		var recheck: Variant = RoadOps.find_segment_under_point(end_pos)
-		if recheck != null:
-			_split_existing_segment(recheck["segment"], end_pos)
+
+	# --- END SIDE ----------------------------------------------------------
+	# Re-locate the end segment (start split may have changed things), absorb
+	# a nearby waypoint, then split.
+	var end_segment: Variant = null
+	var reloc: Variant = RoadOps.find_segment_under_point(end_pos)
+	if reloc != null:
+		end_segment = reloc["segment"]
+		var ep: Vector3 = reloc["point"]
+		end_pos = ep
+	if end_segment != null:
+		var absorb_end := _find_absorb_waypoint(end_segment, end_pos)
+		if absorb_end != null:
+			_absorb_waypoint(absorb_end)
+			var reloc2: Variant = RoadOps.find_segment_under_point(end_pos)
+			if reloc2 != null:
+				end_segment = reloc2["segment"]
+				var ep2: Vector3 = reloc2["point"]
+				end_pos = ep2
+			else:
+				end_segment = null
+	if end_segment != null:
+		_split_existing_segment(end_segment, end_pos)
+
 	var start_node := RoadGraph.get_or_create(_start)
 	var end_node := RoadGraph.get_or_create(end_pos)
 	_start_t_segment = null
@@ -254,6 +288,54 @@ func _update_hover() -> void:
 	var r := SnapResolver.resolve_position(hit, settings, road_type)
 	var rp: Vector3 = r["point"]
 	_snap_indicator.show_at(rp)
+
+# ------------------------------------------------------------ waypoint absorb
+
+func _find_absorb_waypoint(seg: Variant, pos: Vector3) -> RoadNode:
+	if seg == null:
+		return null
+	var s: RoadSegment = seg
+	var candidates: Array = []
+	if s.start_node != null and s.start_node.is_waypoint:
+		candidates.append(s.start_node)
+	if s.end_node != null and s.end_node.is_waypoint:
+		candidates.append(s.end_node)
+	for w_v in candidates:
+		var w: RoadNode = w_v
+		var d: float = w.position.distance_to(pos)
+		if d > 0.5 and d <= WAYPOINT_ABSORB_RADIUS:
+			return w
+	return null
+
+func _absorb_waypoint(w: RoadNode) -> void:
+	if w == null:
+		return
+	if not w.is_waypoint:
+		return
+	if w.segment_ends.size() != 2:
+		return
+	var seg_a: RoadSegment = w.segment_ends[0]["segment"]
+	var seg_b: RoadSegment = w.segment_ends[1]["segment"]
+	if seg_a == null or seg_b == null:
+		return
+	if not is_instance_valid(seg_a) or not is_instance_valid(seg_b):
+		return
+	var a_is_start: bool = w.segment_ends[0]["is_start"]
+	var other_a: RoadNode = seg_a.end_node if a_is_start else seg_a.start_node
+	var b_is_start: bool = w.segment_ends[1]["is_start"]
+	var other_b: RoadNode = seg_b.end_node if b_is_start else seg_b.start_node
+	if other_a == null or other_b == null:
+		return
+	var rt: RoadType = seg_a.road_type
+	if seg_b.road_type != null:
+		if rt == null or seg_b.road_type.lane_count() > rt.lane_count():
+			rt = seg_b.road_type
+	_detach_and_remove(seg_a)
+	_detach_and_remove(seg_b)
+	RoadGraph.nodes.erase(w)
+	_create_segment(other_a, other_b, rt)
+
+# ------------------------------------------------------------ demolish / reverse
 
 func _exit_hover_mode() -> void:
 	if _hovered_segment != null and is_instance_valid(_hovered_segment):
