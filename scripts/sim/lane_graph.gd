@@ -49,7 +49,7 @@ func _compute_node_trims() -> Dictionary:
 	var trims: Dictionary = {}
 	for node in RoadGraph.nodes:
 		if node.is_pass_through():
-			trims[node.id] = 0.0
+			trims[node.id] = PASS_THROUGH_TRIM
 			continue
 		var ends: Array = node.segment_ends
 		if ends.size() < 2:
@@ -133,6 +133,10 @@ func _build_arcs() -> void:
 			continue
 		var node: RoadNode = arriving.to_node
 		var departing_list: Array = by_from_node.get(node.id, [])
+		if node.is_pass_through():
+			# Pass-through: restrict to the single closest-index same-direction
+			# departing lane. Prevents cross-lane arcs across a straight join.
+			departing_list = _pass_through_match(arriving, departing_list)
 		for d in departing_list:
 			var departing: Lane = d
 			if departing.segment == arriving.segment:
@@ -154,6 +158,26 @@ func _build_arcs() -> void:
 			if not arcs_by_node.has(node.id):
 				arcs_by_node[node.id] = []
 			arcs_by_node[node.id].append(arc)
+
+# At a pass-through, return a single-element array with the departing lane
+# that has the closest lane_index to `arriving`, matching direction. Used to
+# avoid all-to-all cross-lane arcs at a straight join.
+static func _pass_through_match(arriving: Lane, departing_list: Array) -> Array:
+	var best: Lane = null
+	var best_delta: int = 9999
+	for d in departing_list:
+		var dep: Lane = d
+		if dep.segment == arriving.segment:
+			continue
+		if dep.direction != arriving.direction:
+			continue
+		var delta: int = absi(dep.lane_index - arriving.lane_index)
+		if delta < best_delta:
+			best_delta = delta
+			best = dep
+	if best == null:
+		return []
+	return [best]
 
 func _build_connections_from_arcs() -> void:
 	for lane in lanes:
@@ -234,6 +258,7 @@ func _build_adjacency() -> void:
 
 const CONFLICT_DIST: float = 3.5
 const CONFLICT_SAMPLES: int = 30
+const PASS_THROUGH_TRIM: float = 2.0
 
 func _build_lane_conflicts() -> void:
 	var by_node: Dictionary = {}
