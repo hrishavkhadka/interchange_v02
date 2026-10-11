@@ -25,6 +25,9 @@ var _exit_dot_mesh: SphereMesh
 var _selected_entry_lane: Lane = null
 var _selected_entry_dot: MeshInstance3D = null
 
+var _panel: PanelContainer
+var _panel_title: Label
+
 func _ready() -> void:
 	_entry_mat = StandardMaterial3D.new()
 	_entry_mat.albedo_color = Color(0.30, 0.70, 1.0)
@@ -41,6 +44,48 @@ func _ready() -> void:
 	_exit_dot_mesh = SphereMesh.new()
 	_exit_dot_mesh.radius = DOT_RADIUS
 	_exit_dot_mesh.height = DOT_RADIUS * 2.0
+	_build_panel()
+
+func _build_panel() -> void:
+	_panel = PanelContainer.new()
+	_panel.visible = false
+	_panel.anchor_left = 0.5
+	_panel.anchor_right = 0.5
+	_panel.anchor_top = 0.0
+	_panel.anchor_bottom = 0.0
+	_panel.offset_left = -180
+	_panel.offset_right = 180
+	_panel.offset_top = 16
+	_panel.offset_bottom = 104
+	add_child(_panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	_panel.add_child(vbox)
+
+	_panel_title = Label.new()
+	_panel_title.text = "Junction"
+	vbox.add_child(_panel_title)
+
+	var hint := Label.new()
+	hint.text = "Drag entry to exit dot to toggle. Click a ribbon to disable."
+	hint.add_theme_color_override("font_color", Color(0.75, 0.75, 0.8))
+	hint.add_theme_font_size_override("font_size", 11)
+	vbox.add_child(hint)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 6)
+	vbox.add_child(btn_row)
+
+	var clear_btn := Button.new()
+	clear_btn.text = "Clear all arcs"
+	clear_btn.pressed.connect(_on_clear_all)
+	btn_row.add_child(clear_btn)
+
+	var reset_btn := Button.new()
+	reset_btn.text = "Reset to default"
+	reset_btn.pressed.connect(_on_reset_default)
+	btn_row.add_child(reset_btn)
 
 func set_active(on: bool) -> void:
 	active = on
@@ -107,7 +152,6 @@ func _on_left_click(shift: bool) -> void:
 	if node == null:
 		return
 	if node.is_pass_through():
-		# Shift+click promotes a pass-through to a full junction.
 		if shift:
 			node.forced_junction = true
 			RoadGraph.graph_changed.emit()
@@ -208,6 +252,28 @@ func _toggle_arc(arc: LaneArc) -> void:
 	ArcOverrides.set_disabled(node, arc.from_lane, arc.to_lane, was_enabled)
 	_open(node)
 
+func _on_clear_all() -> void:
+	if _node == null:
+		return
+	var node_arcs: Array = LaneGraph.arcs_by_node.get(_node.id, [])
+	for a_v in node_arcs:
+		var arc: LaneArc = a_v
+		if arc.from_lane == null or arc.to_lane == null:
+			continue
+		ArcOverrides.set_disabled(_node, arc.from_lane, arc.to_lane, true)
+	_open(_node)
+
+func _on_reset_default() -> void:
+	if _node == null:
+		return
+	var node_arcs: Array = LaneGraph.arcs_by_node.get(_node.id, [])
+	for a_v in node_arcs:
+		var arc: LaneArc = a_v
+		if arc.from_lane == null or arc.to_lane == null:
+			continue
+		ArcOverrides.set_disabled(_node, arc.from_lane, arc.to_lane, false)
+	_open(_node)
+
 func _open(node: RoadNode) -> void:
 	_close()
 	if node == null:
@@ -216,9 +282,13 @@ func _open(node: RoadNode) -> void:
 	if node_arcs.is_empty():
 		return
 	_node = node
+	_panel.visible = true
+	_panel_title.text = "Junction %d" % node.id
 
 	for a in node_arcs:
 		var arc: LaneArc = a
+		if not arc.enabled:
+			continue
 		var r := ArcRibbon.new()
 		r.setup(arc)
 		add_child(r)
@@ -262,3 +332,5 @@ func _close() -> void:
 	_selected_entry_lane = null
 	_selected_entry_dot = null
 	_node = null
+	if _panel != null:
+		_panel.visible = false
