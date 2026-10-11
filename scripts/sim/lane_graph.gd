@@ -162,22 +162,67 @@ func _build_arcs() -> void:
 # At a pass-through, return a single-element array with the departing lane
 # that has the closest lane_index to `arriving`, matching direction. Used to
 # avoid all-to-all cross-lane arcs at a straight join.
-static func _pass_through_match(arriving: Lane, departing_list: Array) -> Array:
-	var best: Lane = null
-	var best_delta: int = 9999
+func _pass_through_match(arriving: Lane, departing_list: Array) -> Array:
+	# Same-direction departing lanes, sorted by index.
+	var candidates: Array = []
 	for d in departing_list:
 		var dep: Lane = d
 		if dep.segment == arriving.segment:
 			continue
 		if dep.direction != arriving.direction:
 			continue
-		var delta: int = absi(dep.lane_index - arriving.lane_index)
-		if delta < best_delta:
-			best_delta = delta
-			best = dep
-	if best == null:
+		candidates.append(dep)
+	if candidates.is_empty():
 		return []
-	return [best]
+	candidates.sort_custom(func(a, b): return a.lane_index < b.lane_index)
+
+	# Number of arriving lanes on the same segment and direction, and the
+	# ordinal position of `arriving` within that group.
+	var group: Array = []
+	for l in lanes:
+		var lane: Lane = l
+		if lane.to_node == arriving.to_node and lane.from_node != arriving.to_node:
+			if lane.segment == arriving.segment and lane.direction == arriving.direction:
+				group.append(lane)
+	group.sort_custom(func(a, b): return a.lane_index < b.lane_index)
+	var n: int = group.size()
+	var arriving_index: int = -1
+	for i in n:
+		if group[i] == arriving:
+			arriving_index = i
+			break
+	if arriving_index < 0:
+		return [candidates[0]]
+
+	var m: int = candidates.size()
+	if n >= m:
+		# Merge (or equal): each arriving lane feeds its closest departing
+		# lane by index. Multiple arriving lanes may share a departing lane.
+		var best: Lane = null
+		var best_delta: int = 9999
+		for c in candidates:
+			var dep: Lane = c
+			var delta: int = absi(dep.lane_index - arriving.lane_index)
+			if delta < best_delta:
+				best_delta = delta
+				best = dep
+		if best == null:
+			return []
+		return [best]
+
+	# Expand: each arriving lane feeds a contiguous range of departing lanes
+	# so the whole width is covered.
+	var start_j: int = int(round(float(arriving_index) * float(m) / float(n)))
+	var end_j: int = int(round(float(arriving_index + 1) * float(m) / float(n))) - 1
+	if end_j < start_j:
+		end_j = start_j
+	var result: Array = []
+	for j in range(start_j, end_j + 1):
+		if j >= 0 and j < m:
+			result.append(candidates[j])
+	if result.is_empty() and m > 0:
+		result.append(candidates[clampi(arriving_index, 0, m - 1)])
+	return result
 
 func _build_connections_from_arcs() -> void:
 	for lane in lanes:
