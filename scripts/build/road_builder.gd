@@ -161,12 +161,12 @@ func _update() -> void:
 		return
 	_preview.visible = true
 	_preview.setup(road_type, _two_point_curve(_start, preview_end))
-	var sharing := _sharing_nodes(_start, preview_end)
 	var t_targets: Array = []
 	if _start_t_segment != null:
 		t_targets.append(_start_t_segment)
 	if end_ts != null:
 		t_targets.append(end_ts)
+	var sharing := _sharing_nodes(_start, preview_end, t_targets)
 	var hw: float = road_type.total_width() * 0.5
 	var valid: bool = RoadOps.is_placement_valid(_start, preview_end, hw, t_targets, sharing)
 	if valid and _would_sharp_bend(_start, preview_end, _start_t_segment, end_ts):
@@ -199,12 +199,12 @@ func _end() -> void:
 		_start_t_segment = null
 		_start_guide_dir = null
 		return
-	var sharing := _sharing_nodes(_start, end_pos)
 	var t_targets: Array = []
 	if _start_t_segment != null:
 		t_targets.append(_start_t_segment)
 	if end_ts != null:
 		t_targets.append(end_ts)
+	var sharing := _sharing_nodes(_start, end_pos, t_targets)
 	var hw: float = road_type.total_width() * 0.5
 	if not RoadOps.is_placement_valid(_start, end_pos, hw, t_targets, sharing):
 		_start_t_segment = null
@@ -512,7 +512,7 @@ func _endpoint_blocked(pos: Vector3, out_dir: Vector3, t_segment: Variant) -> bo
 			return true
 	return false
 
-func _sharing_nodes(start: Vector3, end: Vector3) -> Array:
+func _sharing_nodes(start: Vector3, end: Vector3, t_targets: Array = []) -> Array:
 	var result: Array = []
 	var ns := RoadGraph.find_nearest(start, 1.0)
 	if ns != null:
@@ -520,6 +520,16 @@ func _sharing_nodes(start: Vector3, end: Vector3) -> Array:
 	var ne := RoadGraph.find_nearest(end, 1.0)
 	if ne != null:
 		result.append(ne)
+	# Include endpoints of any T-target segment. This prevents a segment
+	# adjacent at a shared waypoint from being falsely flagged as overlapping.
+	for t in t_targets:
+		var ts: RoadSegment = t
+		if ts == null:
+			continue
+		if ts.start_node != null and not (ts.start_node in result):
+			result.append(ts.start_node)
+		if ts.end_node != null and not (ts.end_node in result):
+			result.append(ts.end_node)
 	return result
 
 func _destroy_preview() -> void:
