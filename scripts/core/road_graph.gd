@@ -8,6 +8,7 @@ const SNAP_RADIUS := 5.0
 var nodes: Array[RoadNode] = []
 var segments: Array[RoadSegment] = []
 var _next_id := 1
+var _next_seg_uid := 1
 var _suppress: bool = false
 
 func begin_batch() -> void:
@@ -44,6 +45,9 @@ func get_or_create_waypoint(pos: Vector3) -> RoadNode:
 	return get_or_create(pos, true)
 
 func register_segment(seg: RoadSegment) -> void:
+	if seg.uid == 0:
+		seg.uid = _next_seg_uid
+		_next_seg_uid += 1
 	if not segments.has(seg):
 		segments.append(seg)
 		if not _suppress:
@@ -58,4 +62,17 @@ func clear() -> void:
 	nodes.clear()
 	segments.clear()
 	_next_id = 1
+	_next_seg_uid = 1
 	graph_changed.emit()
+
+func segment_by_uid(uid: int) -> RoadSegment:
+	for s in segments:
+		if s.uid == uid:
+			return s
+	return null
+
+func node_by_id(nid: int) -> RoadNode:
+	for n in nodes:
+		if n.id == nid:
+			return n
+	return null

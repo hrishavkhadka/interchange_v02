@@ -2,6 +2,8 @@ extends Node
 
 signal lanes_changed
 
+var debug_lane_arcs: bool = false
+
 var arcs: Array = []
 var arcs_by_from_lane: Dictionary = {}
 var arcs_by_node: Dictionary = {}
@@ -49,7 +51,7 @@ func _compute_node_trims() -> Dictionary:
 	var trims: Dictionary = {}
 	for node in RoadGraph.nodes:
 		if node.is_pass_through():
-			trims[node.id] = PASS_THROUGH_TRIM
+			trims[node.id] = 0.0
 			continue
 		var ends: Array = node.segment_ends
 		if ends.size() < 2:
@@ -119,110 +121,44 @@ func _build_arcs() -> void:
 		lane.next_arcs.clear()
 		lane.prev_arcs.clear()
 
-	var by_from_node: Dictionary = {}
-	for lane in lanes:
-		if lane.from_node == null:
+	for node in RoadGraph.nodes:
+		if node.segment_ends.size() < 2:
 			continue
-		var nid: int = lane.from_node.id
-		if not by_from_node.has(nid):
-			by_from_node[nid] = []
-		by_from_node[nid].append(lane)
-
-	for arriving in lanes:
-		if arriving.to_node == null:
-			continue
-		var node: RoadNode = arriving.to_node
-		var departing_list: Array = by_from_node.get(node.id, [])
-		if node.is_pass_through():
-			# Pass-through: restrict to the single closest-index same-direction
-			# departing lane. Prevents cross-lane arcs across a straight join.
-			departing_list = _pass_through_match(arriving, departing_list)
-		for d in departing_list:
-			var departing: Lane = d
-			if departing.segment == arriving.segment:
+		var pairs: Array = LaneArcBuilder.build(node, lanes, debug_lane_arcs)
+		for p_v in pairs:
+			var p: Dictionary = p_v
+			var from_lane: Lane = p["from_lane"]
+			var to_lane: Lane = p["to_lane"]
+			var default_enabled: bool = bool(p["default_enabled"])
+			if from_lane == null or to_lane == null:
 				continue
-			var curve := _make_transition(arriving, departing)
+			if from_lane.next_arcs.has(to_lane):
+				continue
+			var curve := _make_transition(from_lane, to_lane)
 			if curve == null:
 				continue
-			var arc := LaneArc.make(arriving, departing, node, curve)
+			var arc := LaneArc.make(from_lane, to_lane, node, curve)
+
+			var enabled: bool = default_enabled
 			if node.is_pass_through():
-				arc.enabled = true
+				enabled = true
 			else:
-				arc.enabled = not ArcOverrides.is_disabled(node, arriving, departing)
-			arriving.next_arcs[departing] = arc
-			departing.prev_arcs[arriving] = arc
+				var override: int = ArcOverrides.get_override(node, from_lane, to_lane)
+				if override == 1:
+					enabled = true
+				elif override == -1:
+					enabled = false
+
+			arc.enabled = enabled
+			from_lane.next_arcs[to_lane] = arc
+			to_lane.prev_arcs[from_lane] = arc
 			arcs.append(arc)
-			if not arcs_by_from_lane.has(arriving):
-				arcs_by_from_lane[arriving] = []
-			arcs_by_from_lane[arriving].append(arc)
+			if not arcs_by_from_lane.has(from_lane):
+				arcs_by_from_lane[from_lane] = []
+			arcs_by_from_lane[from_lane].append(arc)
 			if not arcs_by_node.has(node.id):
 				arcs_by_node[node.id] = []
 			arcs_by_node[node.id].append(arc)
-
-# At a pass-through, return a single-element array with the departing lane
-# that has the closest lane_index to `arriving`, matching direction. Used to
-# avoid all-to-all cross-lane arcs at a straight join.
-func _pass_through_match(arriving: Lane, departing_list: Array) -> Array:
-	# Same-direction departing lanes, sorted by index.
-	var candidates: Array = []
-	for d in departing_list:
-		var dep: Lane = d
-		if dep.segment == arriving.segment:
-			continue
-		if dep.direction != arriving.direction:
-			continue
-		candidates.append(dep)
-	if candidates.is_empty():
-		return []
-	candidates.sort_custom(func(a, b): return a.lane_index < b.lane_index)
-
-	# Number of arriving lanes on the same segment and direction, and the
-	# ordinal position of `arriving` within that group.
-	var group: Array = []
-	for l in lanes:
-		var lane: Lane = l
-		if lane.to_node == arriving.to_node and lane.from_node != arriving.to_node:
-			if lane.segment == arriving.segment and lane.direction == arriving.direction:
-				group.append(lane)
-	group.sort_custom(func(a, b): return a.lane_index < b.lane_index)
-	var n: int = group.size()
-	var arriving_index: int = -1
-	for i in n:
-		if group[i] == arriving:
-			arriving_index = i
-			break
-	if arriving_index < 0:
-		return [candidates[0]]
-
-	var m: int = candidates.size()
-	if n >= m:
-		# Merge (or equal): each arriving lane feeds its closest departing
-		# lane by index. Multiple arriving lanes may share a departing lane.
-		var best: Lane = null
-		var best_delta: int = 9999
-		for c in candidates:
-			var dep: Lane = c
-			var delta: int = absi(dep.lane_index - arriving.lane_index)
-			if delta < best_delta:
-				best_delta = delta
-				best = dep
-		if best == null:
-			return []
-		return [best]
-
-	# Expand: each arriving lane feeds a contiguous range of departing lanes
-	# so the whole width is covered.
-	var start_j: int = int(round(float(arriving_index) * float(m) / float(n)))
-	var end_j: int = int(round(float(arriving_index + 1) * float(m) / float(n))) - 1
-	if end_j < start_j:
-		end_j = start_j
-	var result: Array = []
-	for j in range(start_j, end_j + 1):
-		if j >= 0 and j < m:
-			result.append(candidates[j])
-	if result.is_empty() and m > 0:
-		result.append(candidates[clampi(arriving_index, 0, m - 1)])
-	return result
 
 func _build_connections_from_arcs() -> void:
 	for lane in lanes:
@@ -303,7 +239,6 @@ func _build_adjacency() -> void:
 
 const CONFLICT_DIST: float = 3.5
 const CONFLICT_SAMPLES: int = 30
-const PASS_THROUGH_TRIM: float = 4.0
 
 func _build_lane_conflicts() -> void:
 	var by_node: Dictionary = {}

@@ -6,22 +6,28 @@ signal road_type_changed(index: int, name: String)
 
 enum Mode { POINTER = 0, ROAD = 1, DEMOLISH = 2, REVERSE = 3, UPDATE = 4 }
 
-const MIN_BEND_DOT: float = 0.87
+const MIN_BEND_DOT: float = 0.94
 const WAYPOINT_SPACING_LANES: float = 30.0
 const DEMOLISH_PICK_RADIUS: float = 3.5
 const WAYPOINT_ABSORB_RADIUS: float = 5.0
 
 const ROAD_TYPE_DEFS := [
-	{ "id": "fb",       "name": "2-lane two-way",   "layout": "FB" },
-	{ "id": "ff",       "name": "2-lane one-way",   "layout": "FF" },
-	{ "id": "ffbb",     "name": "4-lane two-way",   "layout": "FFBB" },
-	{ "id": "ffff",     "name": "4-lane one-way",   "layout": "FFFF" },
-	{ "id": "fff",      "name": "3-lane one-way",   "layout": "FFF" },
-	{ "id": "fffff",    "name": "5-lane one-way",   "layout": "FFFFF" },
-	{ "id": "ffb",      "name": "3-lane (2+1)",     "layout": "FFB" },
-	{ "id": "fffbb",    "name": "5-lane (3+2)",     "layout": "FFFBB" },
-	{ "id": "fffbbb",   "name": "6-lane (3+3)",     "layout": "FFFBBB" },
-	{ "id": "ffffbb",   "name": "6-lane (4+2)",     "layout": "FFFFBB" },
+	{ "id": "f",        "name": "1-lane one-way",  "layout": "F" },
+	{ "id": "ff",       "name": "2-lane one-way",  "layout": "FF" },
+	{ "id": "fff",      "name": "3-lane one-way",  "layout": "FFF" },
+	{ "id": "ffff",     "name": "4-lane one-way",  "layout": "FFFF" },
+	{ "id": "fffff",    "name": "5-lane one-way",  "layout": "FFFFF" },
+	{ "id": "ffffff",   "name": "6-lane one-way",  "layout": "FFFFFF" },
+	{ "id": "fb",       "name": "1+1 two-way",     "layout": "FB" },
+	{ "id": "ffb",      "name": "2+1",             "layout": "FFB" },
+	{ "id": "fffb",     "name": "3+1",             "layout": "FFFB" },
+	{ "id": "ffffb",    "name": "4+1",             "layout": "FFFFB" },
+	{ "id": "ffbb",     "name": "2+2",             "layout": "FFBB" },
+	{ "id": "fffbb",    "name": "3+2",             "layout": "FFFBB" },
+	{ "id": "ffffbb",   "name": "4+2",             "layout": "FFFFBB" },
+	{ "id": "fffbbb",   "name": "3+3",             "layout": "FFFBBB" },
+	{ "id": "ffffbbb",  "name": "4+3",             "layout": "FFFFBBB" },
+	{ "id": "fffffbb",  "name": "5+2",             "layout": "FFFFFBB" },
 ]
 
 @export var road_type: RoadType
@@ -267,8 +273,6 @@ func _update_hover() -> void:
 	var rp: Vector3 = r["point"]
 	_snap_indicator.show_at(rp)
 
-# ------------------------------------------------------------ waypoint absorb
-
 func _absorb_chain(seg: Variant, pos: Vector3) -> Variant:
 	var current: Variant = seg
 	var safety: int = 0
@@ -329,8 +333,6 @@ func _absorb_waypoint(w: RoadNode) -> RoadSegment:
 	RoadGraph.nodes.erase(w)
 	return _create_segment(other_a, other_b, rt)
 
-# ------------------------------------------------------------ demolish / reverse / update
-
 func _exit_hover_mode() -> void:
 	if _hovered_segment != null and is_instance_valid(_hovered_segment):
 		_hovered_segment.set_hovered(false)
@@ -379,15 +381,11 @@ func _update_click() -> void:
 		return
 	if road_type == null or seg.road_type == null:
 		return
-	# No-op if the type is identical.
 	if seg.road_type.lane_layout_string == road_type.lane_layout_string \
 			and is_equal_approx(seg.road_type.lane_width, road_type.lane_width) \
 			and is_equal_approx(seg.road_type.speed_limit_kmh, road_type.speed_limit_kmh):
 		return
-	# Replace the road type, keep the curve. Lanes, arcs, and the slab all
-	# rebuild from this.
 	seg.setup(road_type, seg.curve)
-	# Clear arc overrides at both endpoints; lane indices may have shifted.
 	_clear_node_arc_overrides(seg.start_node)
 	_clear_node_arc_overrides(seg.end_node)
 	RoadGraph.graph_changed.emit()
@@ -398,12 +396,7 @@ func _update_click() -> void:
 func _clear_node_arc_overrides(node: RoadNode) -> void:
 	if node == null:
 		return
-	var node_arcs: Array = LaneGraph.arcs_by_node.get(node.id, [])
-	for a_v in node_arcs:
-		var arc: LaneArc = a_v
-		if arc.from_lane == null or arc.to_lane == null:
-			continue
-		ArcOverrides.set_disabled(node, arc.from_lane, arc.to_lane, false)
+	ArcOverrides.clear_node_overrides(node)
 
 func _find_segment_under_cursor() -> RoadSegment:
 	var hit_raw: Variant = _ground_hit()

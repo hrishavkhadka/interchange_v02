@@ -247,9 +247,10 @@ func _toggle_arc_between(from_lane: Lane, to_lane: Lane) -> void:
 func _toggle_arc(arc: LaneArc) -> void:
 	if arc == null or arc.node == null or arc.from_lane == null or arc.to_lane == null:
 		return
-	var was_enabled: bool = arc.enabled
 	var node: RoadNode = arc.node
-	ArcOverrides.set_disabled(node, arc.from_lane, arc.to_lane, was_enabled)
+	var was_enabled: bool = arc.enabled
+	var new_override: int = -1 if was_enabled else 1
+	ArcOverrides.set_override(node, arc.from_lane, arc.to_lane, new_override)
 	_open(node)
 
 func _on_clear_all() -> void:
@@ -260,18 +261,13 @@ func _on_clear_all() -> void:
 		var arc: LaneArc = a_v
 		if arc.from_lane == null or arc.to_lane == null:
 			continue
-		ArcOverrides.set_disabled(_node, arc.from_lane, arc.to_lane, true)
+		ArcOverrides.set_override(_node, arc.from_lane, arc.to_lane, -1)
 	_open(_node)
 
 func _on_reset_default() -> void:
 	if _node == null:
 		return
-	var node_arcs: Array = LaneGraph.arcs_by_node.get(_node.id, [])
-	for a_v in node_arcs:
-		var arc: LaneArc = a_v
-		if arc.from_lane == null or arc.to_lane == null:
-			continue
-		ArcOverrides.set_disabled(_node, arc.from_lane, arc.to_lane, false)
+	ArcOverrides.clear_node_overrides(_node)
 	_open(_node)
 
 func _open(node: RoadNode) -> void:

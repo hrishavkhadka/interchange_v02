@@ -1,6 +1,8 @@
 class_name RoadSegment
 extends Node3D
 
+var uid: int = 0
+
 var road_type: RoadType
 var curve: Curve3D
 var start_node: RoadNode

@@ -27,6 +27,11 @@ func _process(delta: float) -> void:
 	if _camera == null:
 		return
 
+	# Skip all keyboard camera controls while any modifier is held. That
+	# leaves Ctrl+S, Ctrl+O, Shift+X, and similar combos for other systems.
+	if Input.is_key_pressed(KEY_CTRL) or Input.is_key_pressed(KEY_SHIFT) or Input.is_key_pressed(KEY_ALT):
+		return
+
 	var fwd: Vector3 = -_camera.global_transform.basis.z
 	fwd.y = 0.0
 	if fwd.length_squared() > 0.0001:

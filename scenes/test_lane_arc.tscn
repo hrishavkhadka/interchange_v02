@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bs718grf7fmxq"]
+
+[ext_resource type="Script" uid="uid://bd7dvwa2dyger" path="res://scripts/tests/lane_arc_test.gd" id="1_esa6t"]
+
+[node name="Node3D" type="Node3D" unique_id=20734461]
+script = ExtResource("1_esa6t")

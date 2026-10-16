@@ -119,7 +119,7 @@ func _deserialize(data: Dictionary) -> void:
 		var e: Dictionary = entry
 		var p_raw: Array = e.get("position", [0, 0, 0])
 		var pos := Vector3(p_raw[0], p_raw[1], p_raw[2])
-		var node := RoadGraph.get_or_create(pos)
+		var node: RoadNode = RoadGraph.get_or_create(pos)
 		node.is_waypoint = bool(e.get("is_waypoint", false))
 		node.is_entry = bool(e.get("is_entry", false))
 		node.is_exit = bool(e.get("is_exit", false))
@@ -182,13 +182,13 @@ func _deserialize(data: Dictionary) -> void:
 
 	for o_v in data.get("arc_overrides", []):
 		var o: Dictionary = o_v
-		ArcOverrides.set_disabled_stable(
+		ArcOverrides.set_override_stable(
 			int(o.get("node", -1)),
 			int(o.get("from_seg", -1)),
 			int(o.get("from_lane", 0)),
 			int(o.get("to_seg", -1)),
 			int(o.get("to_lane", 0)),
-			true)
+			int(o.get("value", 0)))
 
 	RoadGraph.end_batch()
 

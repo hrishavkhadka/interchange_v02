@@ -8,6 +8,10 @@ var _snap_toolbar: SnapToolbar
 var _road_type_menu: RoadTypeMenu
 var _level_data_panel: LevelDataPanel
 var _main_toolbar: MainToolbar
+var _save_dialog: ConfirmationDialog
+var _save_field: LineEdit
+var _load_dialog: ConfirmationDialog
+var _load_field: LineEdit
 
 func _toolbar_to_builder_mode(tm: int) -> int:
 	if tm == 4 or tm == 5:
@@ -83,6 +87,8 @@ func _ready() -> void:
 	_main_toolbar.name = "MainToolbar"
 	add_child(_main_toolbar)
 
+	_build_dialogs()
+
 	var snap_expanded: bool = false
 	var road_menu_expanded: bool = false
 	var level_data_expanded: bool = false
@@ -131,10 +137,43 @@ func _ready() -> void:
 		_road_type_menu.visible = build and road_menu_expanded
 		_level_data_panel.visible = build and level_data_expanded)
 
+func _build_dialogs() -> void:
+	_save_dialog = ConfirmationDialog.new()
+	_save_dialog.title = "Save Level (F9)"
+	_save_dialog.ok_button_text = "Save"
+	_save_field = LineEdit.new()
+	_save_field.text = "level_01"
+	_save_dialog.add_child(_save_field)
+	_save_dialog.confirmed.connect(func() -> void:
+		var path: String = LevelIO.save_level(_save_field.text)
+		print("[level] saved to ", path))
+	add_child(_save_dialog)
+
+	_load_dialog = ConfirmationDialog.new()
+	_load_dialog.title = "Load Level (F10)"
+	_load_dialog.ok_button_text = "Load"
+	_load_field = LineEdit.new()
+	_load_field.text = "level_01"
+	_load_dialog.add_child(_load_field)
+	_load_dialog.confirmed.connect(func() -> void:
+		var ok: bool = LevelIO.load_level(_load_field.text)
+		print("[level] load result: ", ok))
+	add_child(_load_dialog)
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var ke := event as InputEventKey
 		if not ke.pressed or ke.echo:
+			return
+		# F9 / F10 for save / load. Ctrl+S and Ctrl+O are intercepted by the
+		# Godot editor before the game sees them, so they cannot be used.
+		if ke.keycode == KEY_F9:
+			_save_dialog.popup_centered()
+			get_viewport().set_input_as_handled()
+			return
+		if ke.keycode == KEY_F10:
+			_load_dialog.popup_centered()
+			get_viewport().set_input_as_handled()
 			return
 		if GameState.is_build():
 			match ke.keycode:
@@ -151,6 +190,9 @@ func _input(event: InputEvent) -> void:
 				KEY_K:
 					_vehicles.debug_lane_changes = not _vehicles.debug_lane_changes
 					print("[debug] lane-change logging = ", _vehicles.debug_lane_changes)
+				KEY_J:
+					LaneGraph.debug_lane_arcs = not LaneGraph.debug_lane_arcs
+					print("[debug] lane-arc debug = ", LaneGraph.debug_lane_arcs)
 		match ke.keycode:
 			KEY_SPACE:
 				if GameState.is_build():

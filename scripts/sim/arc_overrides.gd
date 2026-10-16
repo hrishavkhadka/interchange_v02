@@ -2,7 +2,9 @@ extends Node
 
 signal overrides_changed
 
-var _disabled: Dictionary = {}
+# Key: "node_idx|from_seg_idx|from_lane_idx|to_seg_idx|to_lane_idx"
+# Value: -1 = force disabled, +1 = force enabled. Absence = no override.
+var _values: Dictionary = {}
 
 var _node_idx: Dictionary = {}
 var _seg_idx: Dictionary = {}
@@ -33,30 +35,50 @@ func _key(node: RoadNode, from_lane: Lane, to_lane: Lane) -> String:
 		return ""
 	return "%d|%d|%d|%d|%d" % [ni, fsi, from_lane.lane_index, tsi, to_lane.lane_index]
 
-func is_disabled(node: RoadNode, from_lane: Lane, to_lane: Lane) -> bool:
+# Returns -1 (forced off), 0 (no override), or +1 (forced on).
+func get_override(node: RoadNode, from_lane: Lane, to_lane: Lane) -> int:
 	var k := _key(node, from_lane, to_lane)
-	return k != "" and _disabled.has(k)
+	if k == "":
+		return 0
+	return int(_values.get(k, 0))
 
-func set_disabled(node: RoadNode, from_lane: Lane, to_lane: Lane, on: bool) -> void:
+func set_override(node: RoadNode, from_lane: Lane, to_lane: Lane, value: int) -> void:
 	var k := _key(node, from_lane, to_lane)
 	if k == "":
 		return
-	if on:
-		_disabled[k] = true
+	if value == 0:
+		_values.erase(k)
 	else:
-		_disabled.erase(k)
+		_values[k] = -1 if value < 0 else 1
 	overrides_changed.emit()
 
-func set_disabled_stable(node_idx: int, from_seg_idx: int, from_lane_idx: int, to_seg_idx: int, to_lane_idx: int, on: bool) -> void:
-	var k := "%d|%d|%d|%d|%d" % [node_idx, from_seg_idx, from_lane_idx, to_seg_idx, to_lane_idx]
-	if on:
-		_disabled[k] = true
-	else:
-		_disabled.erase(k)
+# Back-compat shims used by the rest of the codebase.
+func is_disabled(node: RoadNode, from_lane: Lane, to_lane: Lane) -> bool:
+	return get_override(node, from_lane, to_lane) == -1
+
+func set_disabled(node: RoadNode, from_lane: Lane, to_lane: Lane, disabled: bool) -> void:
+	set_override(node, from_lane, to_lane, -1 if disabled else 1)
+
+func clear_node_overrides(node: RoadNode) -> void:
+	if node == null:
+		return
+	var nid: int = _index_of_node(node)
+	if nid < 0:
+		return
+	var to_remove: Array = []
+	for k in _values.keys():
+		var parts: PackedStringArray = String(k).split("|")
+		if parts.size() != 5:
+			continue
+		if int(parts[0]) == nid:
+			to_remove.append(k)
+	for r in to_remove:
+		_values.erase(r)
+	overrides_changed.emit()
 
 func serialize() -> Array:
 	var result: Array = []
-	for k in _disabled:
+	for k in _values.keys():
 		var parts: PackedStringArray = String(k).split("|")
 		if parts.size() != 5:
 			continue
@@ -66,9 +88,17 @@ func serialize() -> Array:
 			"from_lane": int(parts[2]),
 			"to_seg": int(parts[3]),
 			"to_lane": int(parts[4]),
+			"value": int(_values[k]),
 		})
 	return result
 
+func set_override_stable(node_idx: int, from_seg_idx: int, from_lane_idx: int, to_seg_idx: int, to_lane_idx: int, value: int) -> void:
+	var k := "%d|%d|%d|%d|%d" % [node_idx, from_seg_idx, from_lane_idx, to_seg_idx, to_lane_idx]
+	if value == 0:
+		_values.erase(k)
+	else:
+		_values[k] = -1 if value < 0 else 1
+
 func clear() -> void:
-	_disabled.clear()
+	_values.clear()
 	overrides_changed.emit()

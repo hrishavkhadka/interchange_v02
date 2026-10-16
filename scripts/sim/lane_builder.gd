@@ -4,6 +4,7 @@ extends RefCounted
 const DELTA: float = 0.2
 const MIN_ANGLE_DEG: float = 30.0
 const BASE_TRIM_FACTOR: float = 1.5
+const MAX_TRIM_FACTOR: float = 5.0
 
 static func trim_factor_for_angle(interior_angle: float) -> float:
 	var a: float = interior_angle
@@ -12,7 +13,8 @@ static func trim_factor_for_angle(interior_angle: float) -> float:
 		a = min_a
 	if a > PI - 0.001:
 		a = PI - 0.001
-	return 1.0 / tan(a * 0.5) + BASE_TRIM_FACTOR
+	var f: float = 1.0 / tan(a * 0.5) + BASE_TRIM_FACTOR
+	return clampf(f, 1.5, MAX_TRIM_FACTOR)
 
 static func build_lane_curve(
 		segment_curve: Curve3D,

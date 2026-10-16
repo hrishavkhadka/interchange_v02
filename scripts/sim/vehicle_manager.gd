@@ -531,7 +531,7 @@ func _build_steps_from_offset(lanes: Array, offset: float) -> Array[PathStep]:
 			var nxt: Lane = lanes[i + 1]
 			if lane.next_arcs.has(nxt):
 				var arc: LaneArc = lane.next_arcs[nxt]
-				if arc != null and arc.enabled and arc.length > 0.05:
+				if arc != null and arc.enabled:
 					var sp: float = minf(lane.speed_limit, nxt.speed_limit)
 					steps.append(PathStep.make(arc.curve, sp, false, null, 0.0, arc))
 	return steps
@@ -833,6 +833,16 @@ func _start_lane_is_clear(lane: Lane) -> bool:
 	return true
 
 func _build_steps(lanes: Array) -> Array[PathStep]:
+	if debug_lane_changes:
+		for i in range(lanes.size()):
+			var lane: Lane = lanes[i]
+			if i + 1 < lanes.size():
+				var nxt: Lane = lanes[i + 1]
+				if lane.next_arcs.has(nxt):
+					var arc: LaneArc = lane.next_arcs[nxt]
+					if arc != null and arc.enabled and arc.length < 1.0:
+						print("[path] arc %d->%d is only %.3f m long" % [
+							lane.lane_index, nxt.lane_index, arc.length])
 	var steps: Array[PathStep] = []
 	for i in range(lanes.size()):
 		var lane: Lane = lanes[i]
@@ -841,7 +851,7 @@ func _build_steps(lanes: Array) -> Array[PathStep]:
 			var nxt: Lane = lanes[i + 1]
 			if lane.next_arcs.has(nxt):
 				var arc: LaneArc = lane.next_arcs[nxt]
-				if arc != null and arc.enabled and arc.length > 0.05:
+				if arc != null and arc.enabled:
 					var sp: float = minf(lane.speed_limit, nxt.speed_limit)
 					steps.append(PathStep.make(arc.curve, sp, false, null, 0.0, arc))
 	return steps
