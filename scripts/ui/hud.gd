@@ -1,6 +1,9 @@
 class_name HUD
 extends CanvasLayer
 
+signal save_requested()
+signal load_requested()
+
 var _cost_label: Label
 var _road_type_label: Label
 var _hint_label: Label
@@ -53,7 +56,7 @@ func _build_bottom_left() -> void:
 	vbox.add_child(_road_type_label)
 
 	_hint_label = Label.new()
-	_hint_label.text = "LMB: place / act\nRMB/Esc: cancel\n1-9/0: road type  L: lanes\nSpace: play/pause"
+	_hint_label.text = "LMB: place / act\nRMB/Esc: cancel\n1-9/0: road type  L: lanes\nSpace: play/pause\nF9: save  F10: load"
 	_hint_label.add_theme_font_size_override("font_size", 11)
 	_hint_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.8))
 	vbox.add_child(_hint_label)
@@ -64,7 +67,7 @@ func _build_top_right() -> void:
 	panel.anchor_right = 1.0
 	panel.anchor_top = 0.0
 	panel.anchor_bottom = 0.0
-	panel.offset_left = -420
+	panel.offset_left = -520
 	panel.offset_right = -16
 	panel.offset_top = 16
 	panel.offset_bottom = 108
@@ -111,6 +114,23 @@ func _build_top_right() -> void:
 
 	var sep := VSeparator.new()
 	ctrl_row.add_child(sep)
+
+	var save_button := Button.new()
+	save_button.text = "Save"
+	save_button.tooltip_text = "Save level"
+	save_button.custom_minimum_size = Vector2(56, 28)
+	save_button.pressed.connect(func() -> void: save_requested.emit())
+	ctrl_row.add_child(save_button)
+
+	var load_button := Button.new()
+	load_button.text = "Load"
+	load_button.tooltip_text = "Load level"
+	load_button.custom_minimum_size = Vector2(56, 28)
+	load_button.pressed.connect(func() -> void: load_requested.emit())
+	ctrl_row.add_child(load_button)
+
+	var sep2 := VSeparator.new()
+	ctrl_row.add_child(sep2)
 
 	var speeds: Array = [0.5, 1.0, 2.0, 4.0]
 	for m_v in speeds:

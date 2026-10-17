@@ -228,3 +228,6 @@ func _update_transform() -> void:
 	dir.y = 0.0
 	if dir.length_squared() > 0.0001:
 		look_at(global_position + dir.normalized(), Vector3.UP)
+	else:
+		print("[vehicle] v%d zero direction on step %d (curve len %.3f, dist %.3f)" % [
+			color_seed, step_index, current_step_length(), distance_on_step])

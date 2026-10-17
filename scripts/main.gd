@@ -30,6 +30,8 @@ func _ready() -> void:
 
 	var hud := _setup_hud()
 	_builder.cost_changed.connect(hud.set_cost)
+	hud.save_requested.connect(popup_save)
+	hud.load_requested.connect(popup_load)
 
 	_road_type_menu = RoadTypeMenu.new()
 	_road_type_menu.name = "RoadTypeMenu"
@@ -139,7 +141,7 @@ func _ready() -> void:
 
 func _build_dialogs() -> void:
 	_save_dialog = ConfirmationDialog.new()
-	_save_dialog.title = "Save Level (F9)"
+	_save_dialog.title = "Save Level (F9 or button)"
 	_save_dialog.ok_button_text = "Save"
 	_save_field = LineEdit.new()
 	_save_field.text = "level_01"
@@ -150,7 +152,7 @@ func _build_dialogs() -> void:
 	add_child(_save_dialog)
 
 	_load_dialog = ConfirmationDialog.new()
-	_load_dialog.title = "Load Level (F10)"
+	_load_dialog.title = "Load Level (F10 or button)"
 	_load_dialog.ok_button_text = "Load"
 	_load_field = LineEdit.new()
 	_load_field.text = "level_01"
@@ -160,19 +162,25 @@ func _build_dialogs() -> void:
 		print("[level] load result: ", ok))
 	add_child(_load_dialog)
 
+func popup_save() -> void:
+	if _save_dialog != null:
+		_save_dialog.popup_centered()
+
+func popup_load() -> void:
+	if _load_dialog != null:
+		_load_dialog.popup_centered()
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var ke := event as InputEventKey
 		if not ke.pressed or ke.echo:
 			return
-		# F9 / F10 for save / load. Ctrl+S and Ctrl+O are intercepted by the
-		# Godot editor before the game sees them, so they cannot be used.
 		if ke.keycode == KEY_F9:
-			_save_dialog.popup_centered()
+			popup_save()
 			get_viewport().set_input_as_handled()
 			return
 		if ke.keycode == KEY_F10:
-			_load_dialog.popup_centered()
+			popup_load()
 			get_viewport().set_input_as_handled()
 			return
 		if GameState.is_build():

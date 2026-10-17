@@ -69,7 +69,6 @@ func _on_state_changed(s: int) -> void:
 		_spawn_plan.clear()
 		_used_marked_plan = false
 	elif s == GameState.State.PLAYING and _spawn_plan.is_empty():
-		# Fresh play start.
 		_build_spawn_plan()
 
 func _build_spawn_plan() -> void:
@@ -85,7 +84,6 @@ func _build_spawn_plan() -> void:
 		if n.is_exit:
 			exits.append(n)
 	if entries.is_empty():
-		# Fallback: no explicit entries, spawn randomly until GameState.target_count.
 		return
 	_used_marked_plan = true
 	var total: int = 0
@@ -103,7 +101,6 @@ func _build_spawn_plan() -> void:
 			_spawn_plan.append({ "entry": entry, "exit": exit_node, "remaining": count })
 			total += count
 	if total <= 0:
-		# Entries marked but no demand. Fall back to random exits.
 		_used_marked_plan = false
 		_spawn_plan.clear()
 		return
@@ -394,8 +391,20 @@ func _advance(v: Vehicle, move: float) -> void:
 			if v.step_index >= v.path.size():
 				_despawn(v)
 				return
+			
 			var new_step: PathStep = v.path[v.step_index]
 			v.distance_on_step = new_step.start_dist
+			
+			# Diagnostic: detect large spatial jumps between consecutive steps.
+			if debug_lane_changes and new_step.is_lane and v.step_index >= 1:
+				var prev_step: PathStep = v.path[v.step_index - 1]
+				var prev_end: Vector3 = prev_step.curve.sample_baked(prev_step.length)
+				var new_start: Vector3 = new_step.curve.sample_baked(new_step.start_dist)
+				var jump: float = prev_end.distance_to(new_start)
+				if jump > 1.0:
+					print("[jump] v%d step %d->%d: gap %.2f m" % [
+						v.color_seed, v.step_index - 1, v.step_index, jump])
+
 			if new_step.is_lane:
 				v.complete_lane_change()
 				v.cooldown = maxf(v.cooldown, JUNCTION_ARRIVAL_COOLDOWN)
@@ -697,10 +706,8 @@ func _try_spawn() -> void:
 		_try_spawn_fallback()
 
 func _try_spawn_from_plan() -> void:
-	# Pick a random pair with remaining > 0 and try to spawn.
 	if _spawn_plan.is_empty():
 		return
-	# Build list of indices with remaining > 0.
 	var valid: Array = []
 	for i in _spawn_plan.size():
 		var p: Dictionary = _spawn_plan[i]
@@ -708,7 +715,6 @@ func _try_spawn_from_plan() -> void:
 			valid.append(i)
 	if valid.is_empty():
 		return
-	# Shuffle so blocked pairs don't starve spawn.
 	for i in range(valid.size() - 1, 0, -1):
 		var j: int = _rng.randi_range(0, i)
 		var tmp = valid[i]
@@ -833,16 +839,6 @@ func _start_lane_is_clear(lane: Lane) -> bool:
 	return true
 
 func _build_steps(lanes: Array) -> Array[PathStep]:
-	if debug_lane_changes:
-		for i in range(lanes.size()):
-			var lane: Lane = lanes[i]
-			if i + 1 < lanes.size():
-				var nxt: Lane = lanes[i + 1]
-				if lane.next_arcs.has(nxt):
-					var arc: LaneArc = lane.next_arcs[nxt]
-					if arc != null and arc.enabled and arc.length < 1.0:
-						print("[path] arc %d->%d is only %.3f m long" % [
-							lane.lane_index, nxt.lane_index, arc.length])
 	var steps: Array[PathStep] = []
 	for i in range(lanes.size()):
 		var lane: Lane = lanes[i]

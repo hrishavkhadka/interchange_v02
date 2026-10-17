@@ -39,6 +39,8 @@ func _rebuild() -> void:
 	for lane in LaneGraph.lanes:
 		_draw_curve(st, lane.curve, lane.length, LANE_SAMPLES)
 	for arc in LaneGraph.arcs:
+		if not arc.enabled:
+			continue
 		_draw_curve(st, arc.curve, arc.length, ARC_SAMPLES)
 	_mesh.mesh = st.commit()
 
