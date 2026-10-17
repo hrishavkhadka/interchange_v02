@@ -31,6 +31,10 @@ static func build_lane_curve(
 	var trim_start: float = minf(start_trim, max_trim)
 	var trim_end: float = minf(end_trim, max_trim)
 	var usable: float = total_length - trim_start - trim_end
+	if usable < 1.0:
+		trim_start = 0.0
+		trim_end = 0.0
+		usable = total_length
 	if usable < 0.1:
 		return null
 

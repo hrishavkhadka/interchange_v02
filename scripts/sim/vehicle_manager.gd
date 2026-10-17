@@ -402,9 +402,12 @@ func _advance(v: Vehicle, move: float) -> void:
 				var new_start: Vector3 = new_step.curve.sample_baked(new_step.start_dist)
 				var jump: float = prev_end.distance_to(new_start)
 				if jump > 1.0:
-					print("[jump] v%d step %d->%d: gap %.2f m" % [
-						v.color_seed, v.step_index - 1, v.step_index, jump])
-
+					var prev_kind: String = "arc" if prev_step.arc_ref != null else "lane"
+					var prev_len: float = prev_step.length
+					print("[jump] v%d step %d(%s,%.1fm)->%d(lane,%.1fm): gap %.2f m" % [
+						v.color_seed, v.step_index - 1, prev_kind, prev_len,
+						v.step_index, new_step.length, jump])
+						
 			if new_step.is_lane:
 				v.complete_lane_change()
 				v.cooldown = maxf(v.cooldown, JUNCTION_ARRIVAL_COOLDOWN)

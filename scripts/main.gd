@@ -178,11 +178,11 @@ func _input(event: InputEvent) -> void:
 		if not ke.pressed or ke.echo:
 			return
 		if ke.keycode == KEY_F9:
-			popup_save()
+			call_deferred("popup_save")
 			get_viewport().set_input_as_handled()
 			return
 		if ke.keycode == KEY_F10:
-			popup_load()
+			call_deferred("popup_load")
 			get_viewport().set_input_as_handled()
 			return
 		if GameState.is_build():

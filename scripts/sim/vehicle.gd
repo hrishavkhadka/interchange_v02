@@ -226,7 +226,7 @@ func _update_transform() -> void:
 	global_position = p + Vector3(0.0, 0.75, 0.0)
 	var dir: Vector3 = ahead - p
 	dir.y = 0.0
-	if dir.length_squared() > 0.0001:
+	if dir.length_squared() > 0.01:
 		look_at(global_position + dir.normalized(), Vector3.UP)
 	else:
 		print("[vehicle] v%d zero direction on step %d (curve len %.3f, dist %.3f)" % [
