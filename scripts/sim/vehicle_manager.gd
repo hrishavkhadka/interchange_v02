@@ -538,6 +538,12 @@ func _build_steps_from_offset(lanes: Array, offset: float) -> Array[PathStep]:
 			steps.append(PathStep.make(lane.curve, lane.speed_limit, true, lane))
 		if i + 1 < lanes.size():
 			var nxt: Lane = lanes[i + 1]
+			#debug for teleportation problem
+			if debug_lane_changes and not lane.next_arcs.has(nxt):
+				print("[missing arc] lane %d seg %d -> lane %d seg %d" % [
+					lane.lane_index, lane.segment.uid,
+					nxt.lane_index, nxt.segment.uid])
+			#end debug.
 			if lane.next_arcs.has(nxt):
 				var arc: LaneArc = lane.next_arcs[nxt]
 				if arc != null and arc.enabled:
@@ -845,6 +851,12 @@ func _build_steps(lanes: Array) -> Array[PathStep]:
 		steps.append(PathStep.make(lane.curve, lane.speed_limit, true, lane))
 		if i + 1 < lanes.size():
 			var nxt: Lane = lanes[i + 1]
+			#debug for teleportation problem
+			if debug_lane_changes and not lane.next_arcs.has(nxt):
+				print("[missing arc] lane %d seg %d -> lane %d seg %d" % [
+					lane.lane_index, lane.segment.uid,
+					nxt.lane_index, nxt.segment.uid])
+			#end debug.
 			if lane.next_arcs.has(nxt):
 				var arc: LaneArc = lane.next_arcs[nxt]
 				if arc != null and arc.enabled:

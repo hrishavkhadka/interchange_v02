@@ -165,10 +165,12 @@ func _build_dialogs() -> void:
 func popup_save() -> void:
 	if _save_dialog != null:
 		_save_dialog.popup_centered()
+		_save_field.grab_focus()
 
 func popup_load() -> void:
 	if _load_dialog != null:
 		_load_dialog.popup_centered()
+		_load_field.grab_focus()
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:

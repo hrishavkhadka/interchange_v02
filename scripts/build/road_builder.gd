@@ -127,7 +127,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func total_cost() -> float:
 	var t := 0.0
-	for s in _segments:
+	for s in RoadGraph.segments:
 		if is_instance_valid(s):
 			t += s.cost()
 	return t
@@ -237,8 +237,8 @@ func _end() -> void:
 		if seg_after_end != null:
 			_split_existing_segment(seg_after_end, end_pos)
 
-	var start_node := RoadGraph.get_or_create(_start)
-	var end_node := RoadGraph.get_or_create(end_pos)
+	var start_node: RoadNode = RoadGraph.get_or_create(_start)
+	var end_node: RoadNode = RoadGraph.get_or_create(end_pos)
 	_start_t_segment = null
 	_start_guide_dir = null
 	if start_node == end_node:
@@ -405,7 +405,7 @@ func _find_segment_under_cursor() -> RoadSegment:
 	var hit: Vector3 = hit_raw
 	var best: RoadSegment = null
 	var best_dist: float = DEMOLISH_PICK_RADIUS
-	for s in _segments:
+	for s in RoadGraph.segments:
 		if not is_instance_valid(s):
 			continue
 		if s.curve == null or s.road_type == null:
