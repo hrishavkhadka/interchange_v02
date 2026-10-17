@@ -178,11 +178,13 @@ func _input(event: InputEvent) -> void:
 		if not ke.pressed or ke.echo:
 			return
 		if ke.keycode == KEY_F9:
-			call_deferred("popup_save")
+			var save_path: String = LevelIO.save_level("quick_save")
+			print("[level] quick-saved to ", save_path)
 			get_viewport().set_input_as_handled()
 			return
 		if ke.keycode == KEY_F10:
-			call_deferred("popup_load")
+			var ok: bool = LevelIO.load_level("quick_save")
+			print("[level] quick-load result: ", ok)
 			get_viewport().set_input_as_handled()
 			return
 		if GameState.is_build():

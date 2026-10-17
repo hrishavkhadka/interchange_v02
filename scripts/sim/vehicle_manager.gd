@@ -510,11 +510,13 @@ func _execute_lane_change(v: Vehicle, target_lane: Lane) -> void:
 	if lc_len < 6.0:
 		return
 	var target_off: float = p_par + lc_len
-	var remaining: Array = _remaining_lanes(v)
-	if remaining.is_empty():
+	# Recompute the route from the target lane to the destination. Splicing
+	# the old path's lanes onto the new first lane would create consecutive
+	# lanes with no arc between them, causing teleports.
+	var new_route: Array = LanePathfinder.find_path(target_lane, v.target_node)
+	if new_route.is_empty():
 		return
-	remaining[0] = target_lane
-	var new_steps: Array[PathStep] = _build_steps_from_offset(remaining, target_off)
+	var new_steps: Array[PathStep] = _build_steps_from_offset(new_route, target_off)
 	if new_steps.is_empty():
 		return
 	v.begin_lane_change(target_lane, p_par, target_off, new_steps, LC_COOLDOWN_ONWARD)

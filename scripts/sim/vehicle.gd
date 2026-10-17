@@ -221,13 +221,12 @@ func _update_transform() -> void:
 	var L := current_step_length()
 	var d: float = clampf(distance_on_step, 0.0, L)
 	var p: Vector3 = c.sample_baked(d)
-	var ahead_d: float = minf(d + 0.5, L)
+	var behind_d: float = maxf(d - 1.0, 0.0)
+	var ahead_d: float = minf(d + 1.0, L)
+	var behind: Vector3 = c.sample_baked(behind_d)
 	var ahead: Vector3 = c.sample_baked(ahead_d)
 	global_position = p + Vector3(0.0, 0.75, 0.0)
-	var dir: Vector3 = ahead - p
+	var dir: Vector3 = ahead - behind
 	dir.y = 0.0
-	if dir.length_squared() > 0.01:
+	if dir.length_squared() > 0.0001:
 		look_at(global_position + dir.normalized(), Vector3.UP)
-	else:
-		print("[vehicle] v%d zero direction on step %d (curve len %.3f, dist %.3f)" % [
-			color_seed, step_index, current_step_length(), distance_on_step])
