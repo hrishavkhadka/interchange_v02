@@ -88,6 +88,9 @@ func _ready() -> void:
 	_main_toolbar = MainToolbar.new()
 	_main_toolbar.name = "MainToolbar"
 	add_child(_main_toolbar)
+	
+	_main_toolbar.road_shape_changed.connect(func(shape: int) -> void:
+		_builder.settings.road_shape = shape)
 
 	_build_dialogs()
 

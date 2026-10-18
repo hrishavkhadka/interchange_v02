@@ -5,6 +5,7 @@ signal mode_requested(mode: int)
 signal snapping_toggled(on: bool)
 signal road_type_menu_toggled(on: bool)
 signal level_data_toggled(on: bool)
+signal road_shape_changed(shape: int)
 
 const BTN_SIZE: Vector2 = Vector2(36, 36)
 
@@ -13,6 +14,7 @@ var _buttons: Array[Button] = []
 var _snapping_button: Button
 var _road_type_button: Button
 var _level_data_button: Button
+var _shape_option: OptionButton
 var _interactive: bool = true
 
 func _ready() -> void:
@@ -24,7 +26,7 @@ func _ready() -> void:
 	panel.anchor_top = 1.0
 	panel.anchor_bottom = 1.0
 	panel.offset_left = 16
-	panel.offset_right = 506
+	panel.offset_right = 610
 	panel.offset_top = -56
 	panel.offset_bottom = -16
 	add_child(panel)
@@ -43,6 +45,17 @@ func _ready() -> void:
 
 	var sep := VSeparator.new()
 	row.add_child(sep)
+
+	_shape_option = OptionButton.new()
+	_shape_option.add_item("Straight", BuildSettings.RoadShape.STRAIGHT)
+	_shape_option.add_item("Curve", BuildSettings.RoadShape.CURVE)
+	_shape_option.add_item("S-Curve", BuildSettings.RoadShape.S_CURVE)
+	_shape_option.item_selected.connect(func(idx: int) -> void:
+		road_shape_changed.emit(idx))
+	row.add_child(_shape_option)
+
+	var sep2 := VSeparator.new()
+	row.add_child(sep2)
 
 	_road_type_button = Button.new()
 	_road_type_button.text = "▦"
@@ -83,6 +96,7 @@ func set_interactive(on: bool) -> void:
 	_road_type_button.disabled = not on
 	_snapping_button.disabled = not on
 	_level_data_button.disabled = not on
+	_shape_option.disabled = not on
 
 func _add_mode_button(parent: Control, label_text: String, mode_id: int, tip: String) -> void:
 	var b := Button.new()
