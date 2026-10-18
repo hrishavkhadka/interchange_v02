@@ -23,18 +23,13 @@ static func _build_pass_through(ex: Dictionary) -> Array:
 	var result: Array = []
 	for i in entries.size():
 		var e: Dictionary = entries[i]
-		var e_dir: Vector3 = e["dir"]
 		var ent_lanes: Array = entry_lane_map[i]
 		for j in exits.size():
 			var x: Dictionary = exits[j]
 			if int(e["segment_id"]) == int(x["segment_id"]):
 				continue
-			var x_dir: Vector3 = x["dir"]
-			# At a pass-through the arriving direction and departing direction
-			# are collinear and opposite (arriving points toward the node,
-			# departing points away from it).
-			if e_dir.dot(x_dir) > -0.5:
-				continue
+			# At a pass-through, the arriving and departing segments share the
+			# same physical direction of travel. Match by ordinal index only.
 			var ex_lanes: Array = exit_lane_map[j]
 			var n: int = mini(ent_lanes.size(), ex_lanes.size())
 			for k in n:
@@ -107,7 +102,7 @@ static func _pair_key(a: Lane, b: Lane) -> String:
 	]
 
 # ---------------------------------------------------------------------------
-# Extraction (unchanged)
+# Extraction
 # ---------------------------------------------------------------------------
 static func extract(node: RoadNode, all_lanes: Array) -> Dictionary:
 	var entries: Array = []
