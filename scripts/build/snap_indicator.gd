@@ -26,13 +26,16 @@ func _ready() -> void:
 	add_child(_mesh)
 	visible = false
 
-func show_at(p: Vector3) -> void:
+func show_at(p: Vector3, color: Color = Color(1.0, 0.78, 0.20)) -> void:
 	position = p + Vector3(0.0, LIFT, 0.0)
 	var cam := get_viewport().get_camera_3d()
 	if cam != null:
 		var d: float = cam.global_position.distance_to(p)
 		var s: float = clampf(d / REF_DISTANCE, MIN_SCALE, MAX_SCALE)
 		scale = Vector3(s, s, s)
+	var mat := _mesh.material_override as StandardMaterial3D
+	if mat != null:
+		mat.albedo_color = color
 	visible = true
 
 func hide_indicator() -> void:

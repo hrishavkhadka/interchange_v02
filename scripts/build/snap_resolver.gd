@@ -12,6 +12,17 @@ static func resolve_position(raw: Vector3, settings: BuildSettings, road_type: R
 		if n != null:
 			return { "point": n.position, "kind": "node", "t_segment": null, "guide_dir": null }
 
+	if settings.snap_lane:
+		var l: Variant = RoadOps.find_lane_under_point(raw)
+		if l != null:
+			var lane: Lane = l["lane"]
+			var seg: RoadSegment = l["segment"]
+			var p: Vector3 = l["point"]
+			# Don't snap to a lane if we are right at its segment's endpoint
+			if p.distance_to(seg.start_node.position) > 1.0 \
+					and p.distance_to(seg.end_node.position) > 1.0:
+				return { "point": p, "kind": "lane", "t_segment": seg, "guide_dir": null }
+
 	if settings.snap_segment:
 		var s: Variant = RoadOps.find_segment_under_point(raw)
 		if s != null:
@@ -32,6 +43,7 @@ static func resolve_position(raw: Vector3, settings: BuildSettings, road_type: R
 
 	return { "point": raw, "kind": "free", "t_segment": null, "guide_dir": null }
 
+# ... (rest of the file remains unchanged)
 static func _find_snap_node(raw: Vector3) -> RoadNode:
 	var best: RoadNode = null
 	var best_d: float = INF
@@ -44,6 +56,8 @@ static func _find_snap_node(raw: Vector3) -> RoadNode:
 			best_d = d
 			best = n
 	return best
+
+# ... (all other functions below stay exactly as they were)
 
 static func _try_guide_snap(raw: Vector3, lane_w: float, snap_to_ticks: bool) -> Variant:
 	var max_len: float = lane_w * 10.0

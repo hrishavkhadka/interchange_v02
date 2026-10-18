@@ -4,9 +4,7 @@ extends CanvasLayer
 signal settings_changed
 
 var _settings: BuildSettings
-var _all_button: CheckButton
-var _snap_buttons: Array[CheckButton] = []
-var _snap_props: Array[String] = ["snap_node", "snap_segment", "snap_guide", "snap_length", "snap_angle"]
+var _angle_options: Array[float] = [15.0, 30.0, 45.0, 90.0]
 
 func setup(s: BuildSettings) -> void:
 	_settings = s
@@ -22,7 +20,7 @@ func _ready() -> void:
 	panel.anchor_bottom = 1.0
 	panel.offset_left = 16
 	panel.offset_right = 176
-	panel.offset_top = -320
+	panel.offset_top = -360
 	panel.offset_bottom = -76
 	add_child(panel)
 
@@ -34,7 +32,7 @@ func _ready() -> void:
 	title.text = "Snapping"
 	vbox.add_child(title)
 
-	_all_button = CheckButton.new()
+	var _all_button = CheckButton.new()
 	_all_button.text = "All"
 	_all_button.button_pressed = true
 	_all_button.tooltip_text = "Toggle every snap on or off"
@@ -44,8 +42,12 @@ func _ready() -> void:
 	var sep := HSeparator.new()
 	vbox.add_child(sep)
 
-	for prop in _snap_props:
-		_add_toggle(vbox, prop)
+	_add_toggle(vbox, "snap_node")
+	_add_toggle(vbox, "snap_lane")
+	_add_toggle(vbox, "snap_segment")
+	_add_toggle(vbox, "snap_guide")
+	_add_toggle(vbox, "snap_length")
+	_add_toggle(vbox, "snap_angle")
 
 func set_expanded(on: bool) -> void:
 	visible = on
@@ -53,6 +55,7 @@ func set_expanded(on: bool) -> void:
 func _add_toggle(parent: Control, prop: String) -> void:
 	var labels := {
 		"snap_node": "Node",
+		"snap_lane": "Lane",
 		"snap_segment": "Segment",
 		"snap_guide": "Guideline",
 		"snap_length": "Length",
@@ -66,19 +69,26 @@ func _add_toggle(parent: Control, prop: String) -> void:
 		_refresh_all_state()
 		settings_changed.emit())
 	parent.add_child(b)
-	_snap_buttons.append(b)
+	if prop != "snap_node":
+		pass # we don't store an array of buttons anymore, handled by name lookup in _on_all_toggled
 
 func _on_all_toggled(on: bool) -> void:
-	for prop in _snap_props:
+	var _props := ["snap_node", "snap_lane", "snap_segment", "snap_guide", "snap_length", "snap_angle"]
+	for prop in _props:
 		_settings.set(prop, on)
-	for b in _snap_buttons:
-		b.set_pressed_no_signal(on)
+	for child in get_node("PanelContainer/VBoxContainer").get_children():
+		if child is CheckButton and child.text != "All":
+			child.set_pressed_no_signal(on)
 	settings_changed.emit()
 
 func _refresh_all_state() -> void:
+	var _props := ["snap_node", "snap_lane", "snap_segment", "snap_guide", "snap_length", "snap_angle"]
 	var all_on := true
-	for prop in _snap_props:
+	for prop in _props:
 		if not _settings.get(prop):
 			all_on = false
 			break
-	_all_button.set_pressed_no_signal(all_on)
+	for child in get_node("PanelContainer/VBoxContainer").get_children():
+		if child is CheckButton and child.text == "All":
+			child.set_pressed_no_signal(all_on)
+			break

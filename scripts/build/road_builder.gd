@@ -157,28 +157,42 @@ func _update() -> void:
 	var hit: Vector3 = hit_raw
 	_guidelines.update(hit, road_type)
 	_start_indicator.show_at(_start)
+	
 	var final := _resolve_end(hit)
 	var preview_end: Vector3 = final["point"]
 	var end_ts: Variant = final["t_segment"]
+
 	var min_len: float = road_type.lane_width
 	if _start.distance_to(preview_end) < min_len:
 		_preview.visible = false
 		_snap_indicator.hide_indicator()
 		return
+
 	_preview.visible = true
 	_preview.setup(road_type, _two_point_curve(_start, preview_end))
+	
 	var t_targets: Array = []
 	if _start_t_segment != null:
 		t_targets.append(_start_t_segment)
 	if end_ts != null:
 		t_targets.append(end_ts)
+		
 	var sharing := _sharing_nodes(_start, preview_end, t_targets)
 	var hw: float = road_type.total_width() * 0.5
 	var valid: bool = RoadOps.is_placement_valid(_start, preview_end, hw, t_targets, sharing)
 	if valid and _would_sharp_bend(_start, preview_end, _start_t_segment, end_ts):
 		valid = false
 	_preview.set_preview_validity(valid)
-	_snap_indicator.show_at(preview_end)
+
+	var dk: String = final.get("direction_kind", "")
+	var kind: String = final["kind"]
+	
+	if kind == "lane":
+		_snap_indicator.show_at(preview_end, Color(0.2, 1.0, 0.4))
+	elif kind in ["node", "segment", "distance"] or dk != "":
+		_snap_indicator.show_at(preview_end)
+	else:
+		_snap_indicator.hide_indicator()
 
 func _end() -> void:
 	if not _drawing:
@@ -269,9 +283,15 @@ func _update_hover() -> void:
 	var hit: Vector3 = hit_raw
 	if _guidelines != null:
 		_guidelines.update(hit, road_type)
+		
 	var r := SnapResolver.resolve_position(hit, settings, road_type)
+	var kind: String = r["kind"]
 	var rp: Vector3 = r["point"]
-	_snap_indicator.show_at(rp)
+	
+	if kind == "lane":
+		_snap_indicator.show_at(rp, Color(0.2, 1.0, 0.4))
+	else:
+		_snap_indicator.show_at(rp)
 
 func _absorb_chain(seg: Variant, pos: Vector3) -> Variant:
 	var current: Variant = seg

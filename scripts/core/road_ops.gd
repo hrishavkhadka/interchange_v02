@@ -142,3 +142,44 @@ static func _seg_intersect_2d(p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2
 	if t < 0.0 or t > 1.0 or u < 0.0 or u > 1.0:
 		return null
 	return p1 + d1 * t
+	
+static func find_lane_under_point(pos: Vector3) -> Variant:
+	var best_dist := INF
+	var best: Variant = null
+	for lane in LaneGraph.lanes:
+		if lane.length < 0.1:
+			continue
+		var proj := _project_to_curve_xz(pos, lane.curve, lane.length)
+		var dist := Vector2(proj.x - pos.x, proj.z - pos.z).length()
+		var half_w := lane.segment.road_type.lane_width * 0.5
+		if dist <= half_w and dist < best_dist:
+			best_dist = dist
+			best = { "lane": lane, "segment": lane.segment, "point": proj }
+	return best
+
+static func _project_to_curve_xz(p: Vector3, curve: Curve3D, length: float) -> Vector3:
+	var samples := 16
+	var best_d := INF
+	var best_t := 0.0
+	for i in range(samples + 1):
+		var t := float(i) / float(samples)
+		var q := curve.sample_baked(t * length)
+		var d := Vector2(q.x - p.x, q.z - p.z).length_squared()
+		if d < best_d:
+			best_d = d
+			best_t = t
+	var step := 1.0 / float(samples)
+	var lo := maxf(best_t - step, 0.0)
+	var hi := minf(best_t + step, 1.0)
+	for _i in range(8):
+		var m1 := lerpf(lo, hi, 1.0 / 3.0)
+		var m2 := lerpf(lo, hi, 2.0 / 3.0)
+		var p1 := curve.sample_baked(m1 * length)
+		var p2 := curve.sample_baked(m2 * length)
+		var d1 := Vector2(p1.x - p.x, p1.z - p.z).length_squared()
+		var d2 := Vector2(p2.x - p.x, p2.z - p.z).length_squared()
+		if d1 < d2:
+			hi = m2
+		else:
+			lo = m1
+	return curve.sample_baked(((lo + hi) * 0.5) * length)
