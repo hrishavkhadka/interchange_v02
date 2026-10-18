@@ -187,6 +187,11 @@ func _make_transition(from_lane: Lane, to_lane: Lane) -> Curve3D:
 	var p2: Vector3 = end_p - end_t * handle_len
 	var samples: int = maxi(6, int(dist * 1.5))
 	var curve := Curve3D.new()
+	if debug_lane_arcs:
+		var turn_deg: float = rad_to_deg(start_t.angle_to(end_t))
+		if turn_deg > 90.0:
+			print("[transition] sharp turn %.1f deg, from lane %d to lane %d, dist %.2f" % [
+				turn_deg, from_lane.lane_index, to_lane.lane_index, dist])
 	for i in range(samples + 1):
 		var t: float = float(i) / float(samples)
 		curve.add_point(_bezier3(start_p, p1, p2, end_p, t))

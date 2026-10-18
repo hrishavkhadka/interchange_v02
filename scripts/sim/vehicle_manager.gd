@@ -543,14 +543,12 @@ func _build_steps_from_offset(lanes: Array, offset: float) -> Array[PathStep]:
 			steps.append(PathStep.make(lane.curve, lane.speed_limit, true, lane))
 		if i + 1 < lanes.size():
 			var nxt: Lane = lanes[i + 1]
-			#debug for teleportation problem
-			if debug_lane_changes and not lane.next_arcs.has(nxt):
-				print("[missing arc] lane %d seg %d -> lane %d seg %d" % [
-					lane.lane_index, lane.segment.uid,
-					nxt.lane_index, nxt.segment.uid])
-			#end debug.
 			if lane.next_arcs.has(nxt):
 				var arc: LaneArc = lane.next_arcs[nxt]
+				if debug_lane_changes and arc != null and not arc.enabled:
+					print("[disabled arc] lane %d (seg %d) -> lane %d (seg %d)" % [
+						lane.lane_index, lane.segment.uid,
+						nxt.lane_index, nxt.segment.uid])
 				if arc != null and arc.enabled:
 					var sp: float = minf(lane.speed_limit, nxt.speed_limit)
 					steps.append(PathStep.make(arc.curve, sp, false, null, 0.0, arc))
@@ -686,6 +684,10 @@ func _align_exit_lane(route: Array, target: RoadNode, pref_idx: int) -> Array:
 		if lane.lane_index != pref_idx:
 			continue
 		if not second_last.next_arcs.has(lane):
+			continue
+		# Only accept the substitution if the arc is actually enabled.
+		var arc: LaneArc = second_last.next_arcs[lane]
+		if arc == null or not arc.enabled:
 			continue
 		var new_route: Array = route.duplicate()
 		new_route[new_route.size() - 1] = lane
@@ -856,14 +858,12 @@ func _build_steps(lanes: Array) -> Array[PathStep]:
 		steps.append(PathStep.make(lane.curve, lane.speed_limit, true, lane))
 		if i + 1 < lanes.size():
 			var nxt: Lane = lanes[i + 1]
-			#debug for teleportation problem
-			if debug_lane_changes and not lane.next_arcs.has(nxt):
-				print("[missing arc] lane %d seg %d -> lane %d seg %d" % [
-					lane.lane_index, lane.segment.uid,
-					nxt.lane_index, nxt.segment.uid])
-			#end debug.
 			if lane.next_arcs.has(nxt):
 				var arc: LaneArc = lane.next_arcs[nxt]
+				if debug_lane_changes and arc != null and not arc.enabled:
+					print("[disabled arc] lane %d (seg %d) -> lane %d (seg %d)" % [
+						lane.lane_index, lane.segment.uid,
+						nxt.lane_index, nxt.segment.uid])
 				if arc != null and arc.enabled:
 					var sp: float = minf(lane.speed_limit, nxt.speed_limit)
 					steps.append(PathStep.make(arc.curve, sp, false, null, 0.0, arc))
