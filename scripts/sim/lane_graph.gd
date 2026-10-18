@@ -140,14 +140,11 @@ func _build_arcs() -> void:
 			var arc := LaneArc.make(from_lane, to_lane, node, curve)
 
 			var enabled: bool = default_enabled
-			if node.is_pass_through():
+			var override: int = ArcOverrides.get_override(node, from_lane, to_lane)
+			if override == 1:
 				enabled = true
-			else:
-				var override: int = ArcOverrides.get_override(node, from_lane, to_lane)
-				if override == 1:
-					enabled = true
-				elif override == -1:
-					enabled = false
+			elif override == -1:
+				enabled = false
 
 			arc.enabled = enabled
 			from_lane.next_arcs[to_lane] = arc

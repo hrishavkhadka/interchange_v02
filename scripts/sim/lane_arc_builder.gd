@@ -5,47 +5,11 @@ static func build(node: RoadNode, all_lanes: Array, debug: bool = false) -> Arra
 	var ex: Dictionary = extract(node, all_lanes)
 	var entries: Array = ex["entries"]
 	var exits: Array = ex["exits"]
-	if entries.is_empty() or exits.is_empty():
-		return []
-	if node.is_pass_through():
-		return _build_pass_through(ex)
-	return _build_junction(node, entries, exits, ex["entry_lane_map"], ex["exit_lane_map"], debug)
-
-# ---------------------------------------------------------------------------
-# Pass-through: strict same-index matching. No crossovers allowed.
-# ---------------------------------------------------------------------------
-static func _build_pass_through(ex: Dictionary) -> Array:
-	var entries: Array = ex["entries"]
-	var exits: Array = ex["exits"]
 	var entry_lane_map: Array = ex["entry_lane_map"]
 	var exit_lane_map: Array = ex["exit_lane_map"]
+	if entries.is_empty() or exits.is_empty():
+		return []
 
-	var result: Array = []
-	for i in entries.size():
-		var e: Dictionary = entries[i]
-		var ent_lanes: Array = entry_lane_map[i]
-		for j in exits.size():
-			var x: Dictionary = exits[j]
-			if int(e["segment_id"]) == int(x["segment_id"]):
-				continue
-			# At a pass-through, the arriving and departing segments share the
-			# same physical direction of travel. Match by ordinal index only.
-			var ex_lanes: Array = exit_lane_map[j]
-			var n: int = mini(ent_lanes.size(), ex_lanes.size())
-			for k in n:
-				result.append({
-					"from_lane": ent_lanes[k],
-					"to_lane": ex_lanes[k],
-					"default_enabled": true,
-				})
-	return result
-
-# ---------------------------------------------------------------------------
-# Full junction algorithm. Every legal candidate pair is emitted so the
-# editor can toggle disabled ones on later.
-# ---------------------------------------------------------------------------
-static func _build_junction(node: RoadNode, entries: Array, exits: Array,
-		entry_lane_map: Array, exit_lane_map: Array, debug: bool) -> Array:
 	var p1: Dictionary = LaneArcAlgorithm.init_phase1(entries, exits, false)
 	var p2: Dictionary = LaneArcAlgorithm.iterate_phase2(p1["entries"], p1["exits"], p1["matrix"], false)
 	var arcs_data: Array = LaneArcAlgorithm.assign_phase3(p2["entries"], p2["exits"], p2["matrix"], debug)
@@ -101,9 +65,6 @@ static func _pair_key(a: Lane, b: Lane) -> String:
 		b.segment.get_instance_id(), b.lane_index,
 	]
 
-# ---------------------------------------------------------------------------
-# Extraction
-# ---------------------------------------------------------------------------
 static func extract(node: RoadNode, all_lanes: Array) -> Dictionary:
 	var entries: Array = []
 	var exits: Array = []
