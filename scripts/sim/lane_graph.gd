@@ -50,10 +50,11 @@ func _rebuild() -> void:
 func _compute_node_trims() -> Dictionary:
 	var trims: Dictionary = {}
 	for node in RoadGraph.nodes:
-		if node.is_pass_through():
+		var ends: Array = node.segment_ends
+		if ends.size() < 2:
 			trims[node.id] = 0.0
 			continue
-		var ends: Array = node.segment_ends
+		# ... rest of the function stays the same ...
 		if ends.size() < 2:
 			trims[node.id] = 0.0
 			continue

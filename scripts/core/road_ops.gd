@@ -9,8 +9,8 @@ static func find_crossings(start: Vector3, end: Vector3) -> Array:
 	for seg in RoadGraph.segments:
 		if seg.start_node == null or seg.end_node == null:
 			continue
-		var b_start3 := seg.start_node.position
-		var b_end3 := seg.end_node.position
+		var b_start3: Vector3 = seg.start_node.position
+		var b_end3: Vector3 = seg.end_node.position
 
 		if _near(b_start3, start) or _near(b_start3, end):
 			continue

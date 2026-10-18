@@ -1,7 +1,7 @@
 class_name VehicleManager
 extends Node3D
 
-@export var spawn_interval: float = 0.5
+@export var spawn_interval: float = 0.1
 @export var spawn_clear_distance: float = 10.0
 @export var max_vehicles: int = 200
 @export var enable_lane_changes: bool = true
@@ -47,8 +47,6 @@ var _rng := RandomNumberGenerator.new()
 var _vehicles: Array[Vehicle] = []
 var _arc_claims: Dictionary = {}
 
-# Spawn plan built at play start.
-# entries: Array of { entry: RoadNode, exit: RoadNode, remaining: int }
 var _spawn_plan: Array = []
 var _used_marked_plan: bool = false
 
@@ -403,11 +401,10 @@ func _advance(v: Vehicle, move: float) -> void:
 				var jump: float = prev_end.distance_to(new_start)
 				if jump > 1.0:
 					var prev_kind: String = "arc" if prev_step.arc_ref != null else "lane"
-					var prev_len: float = prev_step.length
 					print("[jump] v%d step %d(%s,%.1fm)->%d(lane,%.1fm): gap %.2f m" % [
-						v.color_seed, v.step_index - 1, prev_kind, prev_len,
+						v.color_seed, v.step_index - 1, prev_kind, prev_step.length,
 						v.step_index, new_step.length, jump])
-						
+
 			if new_step.is_lane:
 				v.complete_lane_change()
 				v.cooldown = maxf(v.cooldown, JUNCTION_ARRIVAL_COOLDOWN)
