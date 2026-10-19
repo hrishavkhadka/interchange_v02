@@ -171,6 +171,8 @@ Main road placement tool.
 
 **Build stages** (`enum BuildStage`): `NONE`, `STRAIGHT_END`, `CURVE_END`, `CURVE_BEND`, `SCURVE_MID1`, `SCURVE_MID2`, `SCURVE_END`.
 
+**Validation**: `_is_placement_valid()` centralizes all checks (overlaps, sharp bends, minimum curve radius). Called from both the live preview (`_validate_preview`) and the commit handlers (`_click_curve_end`, etc.).
+
 **Shape flow** (from `settings.road_shape`):
 
 - `STRAIGHT`: click start → click end → commit.

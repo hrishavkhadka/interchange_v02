@@ -81,3 +81,10 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 **Detected in:** Phase 1/4
 **Files:** `scripts/build/road_builder.gd`
 **Status:** fixed
+
+## RoadBuilder — Red preview could still be placed
+**Cause:** The radius check was only present in `_validate_preview()`. The actual click handlers (`_click_curve_end`, etc.) called `is_placement_valid` directly and missed the radius check.
+**Fix:** Extracted validation into `_is_placement_valid()`, which is now called by both the preview updater and the click handlers.
+**Detected in:** Phase 1/4
+**Files:** `scripts/build/road_builder.gd`
+**Status:** fixed

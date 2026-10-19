@@ -12,9 +12,10 @@ Append-only log of every phase commit. **Newest entries at the top.**
 - Added exact tangent checks in `RoadNode.is_pass_through()`, ensuring tight curves remain waypoints rather than junctions.
 - Upgraded `CurveMath.slice()` to use De Casteljau's algorithm for perfect cubic sub-curve splitting.
 - Added minimum radius validation. If the curve turns tighter than `half_width + 1.5 * lane_width`, the preview turns red and placement is blocked.
+- Centralized placement validation to `_is_placement_valid()` to ensure red previews cannot be placed.
 - Reduced curve waypoint density to 16 lanes (~51m). Equalized spacing so there are no tiny "remnant" segments.
 - Enabled demolishing of tiny segments.
-**Tested:** C-curves, S-curves, straight roads. Snapping works relative to the previous point. Free-placed points no longer shift. Tight curves do not become junctions. Demolish cleans up completely.
+**Tested:** C-curves, S-curves, straight roads. Snapping works relative to the previous point. Free-placed points no longer shift. Tight curves do not become junctions. Red previews block placement. Demolish cleans up completely.
 **Follow-ups:** Curve segment splitting when connecting new roads (T-junctions on curves).
 
 ## Entry format
