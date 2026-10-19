@@ -4,7 +4,7 @@ extends Node3D
 signal cost_changed(total_cost: float)
 signal road_type_changed(index: int, name: String)
 
-enum Mode { POINTER = 0, ROAD = 1, DEMOLISH = 2, REVERSE = 3, UPDATE = 4 }
+enum Mode { POINTER = 0, ROAD = 1, DEMOLISH = 2, REVERSE = 3, UPDATE = 4, MOVE = 7 }
 enum BuildStage { NONE, STRAIGHT_END, CURVE_MID, CURVE_END, SCURVE_MID1, SCURVE_MID2, SCURVE_END }
 
 const MIN_BEND_DOT: float = 0.87
@@ -54,6 +54,20 @@ var _guidelines: Guidelines
 
 var _hovered_segment: RoadSegment = null
 
+var _move_selected_node: RoadNode = null
+var _move_selected_segment: RoadSegment = null
+var _move_is_dragging: bool = false
+var _move_drag_target: String = "" # "node", "handle", "segment"
+var _move_drag_segment: RoadSegment = null
+var _move_drag_node_side: bool = false # true if start, false if end
+var _move_drag_start_mouse: Vector3 = Vector3.ZERO
+var _move_drag_start_node_pos: Vector3 = Vector3.ZERO
+var _move_drag_start_handles: Dictionary = {}
+
+var _move_backup_curves: Dictionary = {}
+var _move_backup_nodes: Dictionary = {}
+var _move_gizmos: Array[MeshInstance3D] = []
+
 @onready var _preview_root: Node3D = $PreviewRoot
 @onready var _segments_root: Node3D = $SegmentsRoot
 
@@ -92,12 +106,21 @@ func set_mode(m: int) -> void:
 		if _snap_indicator != null: _snap_indicator.hide_indicator()
 		if _start_indicator != null: _start_indicator.hide_indicator()
 		if _guidelines != null: _guidelines.clear()
+	if mode == Mode.MOVE:
+		_move_is_dragging = false
+		_move_selected_node = null
+		_move_selected_segment = null
+		_update_move_gizmos()
+	else:
+		_clear_move_gizmos()
 
 func _process(_dt: float) -> void:
 	if not GameState.is_build(): return
 	if mode == Mode.ROAD:
 		if _stage != BuildStage.NONE: _update()
 		else: _update_hover()
+	elif mode == Mode.MOVE:
+		if not _move_is_dragging: _move_hover()
 	elif mode in [Mode.DEMOLISH, Mode.REVERSE, Mode.UPDATE]:
 		_demolish_hover()
 
@@ -106,21 +129,33 @@ func _unhandled_input(event: InputEvent) -> void:
 	
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-			if mode == Mode.ROAD:
-				_handle_left_click()
-			elif mode == Mode.DEMOLISH:
-				_demolish_click()
-			elif mode == Mode.REVERSE:
-				_reverse_click()
-			elif mode == Mode.UPDATE:
-				_update_click()
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				if mode == Mode.ROAD: _handle_left_click()
+				elif mode == Mode.DEMOLISH: _demolish_click()
+				elif mode == Mode.REVERSE: _reverse_click()
+				elif mode == Mode.UPDATE: _update_click()
+				elif mode == Mode.MOVE: _move_click_pressed()
+			else:
+				if mode == Mode.MOVE: _move_click_released()
 		elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
-			if _stage != BuildStage.NONE: _cancel()
+			if mode == Mode.MOVE:
+				_move_selected_node = null
+				_move_selected_segment = null
+				_update_move_gizmos()
+			elif _stage != BuildStage.NONE:
+				_cancel()
+	elif event is InputEventMouseMotion and mode == Mode.MOVE and _move_is_dragging:
+		_move_drag_update()
 	elif event is InputEventKey:
 		var ke := event as InputEventKey
-		if ke.pressed and ke.keycode == KEY_ESCAPE and _stage != BuildStage.NONE:
-			_cancel()
+		if ke.pressed and ke.keycode == KEY_ESCAPE:
+			if mode == Mode.MOVE:
+				_move_selected_node = null
+				_move_selected_segment = null
+				_update_move_gizmos()
+			elif _stage != BuildStage.NONE:
+				_cancel()
 
 func _handle_left_click() -> void:
 	if _stage == BuildStage.NONE:
@@ -917,3 +952,282 @@ func _cleanup_degenerate_segments() -> void:
 			to_remove.append(s)
 	for s in to_remove:
 		_remove_segment_and_cleanup(s)
+
+# ---------------------------------------------------------------- move it tool
+
+func _move_hover() -> void:
+	if _move_is_dragging: return
+	var hit_raw: Variant = _ground_hit()
+	if hit_raw == null: return
+	var hit: Vector3 = hit_raw
+	
+	# If we have a selection, check if we are hovering over the entity itself
+	if _move_selected_node != null:
+		if hit.distance_to(_move_selected_node.position) < 2.0:
+			# Optional: could highlight the node here
+			pass
+
+func _move_click_pressed() -> void:
+	var hit_raw: Variant = _ground_hit()
+	if hit_raw == null: return
+	var hit: Vector3 = hit_raw
+	
+	# 1. Check if clicking a handle
+	if _move_selected_node != null:
+		for entry in _move_selected_node.segment_ends:
+			var seg = entry["segment"]
+			var is_start = entry["is_start"]
+			var last = seg.curve.point_count - 1
+			var handle_pos = Vector3.ZERO
+			if is_start: handle_pos = _move_selected_node.position + seg.curve.get_point_out(0)
+			else: handle_pos = _move_selected_node.position + seg.curve.get_point_in(last)
+			if hit.distance_to(handle_pos) < 2.0:
+				_start_move_drag("handle", seg, is_start, hit)
+				return
+	elif _move_selected_segment != null:
+		var seg = _move_selected_segment
+		var last = seg.curve.point_count - 1
+		if hit.distance_to(seg.start_node.position + seg.curve.get_point_out(0)) < 2.0:
+			_start_move_drag("handle", seg, true, hit)
+			return
+		if hit.distance_to(seg.end_node.position + seg.curve.get_point_in(last)) < 2.0:
+			_start_move_drag("handle", seg, false, hit)
+			return
+
+	# 2. Check if clicking selected node or segment to drag
+	if _move_selected_node != null and hit.distance_to(_move_selected_node.position) < 2.0:
+		_start_move_drag("node", null, false, hit)
+		return
+	if _move_selected_segment != null:
+		var res = RoadOps._get_closest_point_on_curve(hit, _move_selected_segment.curve, _move_selected_segment.curve.get_baked_length())
+		if res["dist"] < 2.0:
+			_start_move_drag("segment", _move_selected_segment, false, hit)
+			return
+
+	# 3. Selection
+	var best_node = RoadGraph.find_nearest(hit, 5.0)
+	if best_node != null:
+		_move_selected_node = best_node
+		_move_selected_segment = null
+		_update_move_gizmos()
+		return
+		
+	var best_seg_res = RoadOps.find_nearest_segment(hit, 10.0)
+	if best_seg_res != null:
+		_move_selected_segment = best_seg_res["segment"]
+		_move_selected_node = null
+		_update_move_gizmos()
+		return
+
+	# 4. Deselect
+	_move_selected_node = null
+	_move_selected_segment = null
+	_update_move_gizmos()
+
+func _start_move_drag(target_type: String, target_seg: RoadSegment, is_start: bool, mouse_hit: Vector3) -> void:
+	_move_is_dragging = true
+	_move_drag_target = target_type
+	_move_drag_segment = target_seg
+	_move_drag_node_side = is_start
+	_move_drag_start_mouse = mouse_hit
+	
+	_move_backup_curves.clear()
+	_move_backup_nodes.clear()
+	_move_drag_start_handles.clear()
+	
+	if target_type == "node":
+		_move_drag_start_node_pos = _move_selected_node.position
+		_move_backup_nodes[_move_selected_node] = _move_selected_node.position
+		for entry in _move_selected_node.segment_ends:
+			var s = entry["segment"]
+			_move_backup_curves[s] = s.curve.duplicate()
+	elif target_type == "handle":
+		_move_backup_curves[_move_drag_segment] = _move_drag_segment.curve.duplicate()
+		if Input.is_key_pressed(KEY_ALT):
+			var other_seg = _find_other_segment_at_node(_move_drag_segment, _move_drag_node_side)
+			if other_seg != null:
+				_move_backup_curves[other_seg] = other_seg.curve.duplicate()
+	elif target_type == "segment":
+		_move_backup_curves[_move_drag_segment] = _move_drag_segment.curve.duplicate()
+		var last = _move_drag_segment.curve.point_count - 1
+		_move_drag_start_handles[_move_drag_segment] = {
+			"out": _move_drag_segment.curve.get_point_out(0),
+			"in": _move_drag_segment.curve.get_point_in(last)
+		}
+
+func _move_drag_update() -> void:
+	if not _move_is_dragging: return
+	var hit_raw: Variant = _ground_hit()
+	if hit_raw == null: return
+	var hit: Vector3 = hit_raw
+	
+	if _move_drag_target == "node":
+		var delta = hit - _move_drag_start_mouse
+		var new_pos = _move_drag_start_node_pos + delta
+		_move_selected_node.position = new_pos
+		
+		for entry in _move_selected_node.segment_ends:
+			var s = entry["segment"]
+			var is_start = entry["is_start"]
+			var last = s.curve.point_count - 1
+			if is_start:
+				s.curve.set_point_position(0, new_pos)
+				s.curve.set_point_out(0, s.curve.get_point_out(0) + delta)
+			else:
+				s.curve.set_point_position(last, new_pos)
+				s.curve.set_point_in(last, s.curve.get_point_in(last) + delta)
+			s.rebuild_mesh()
+			
+	elif _move_drag_target == "handle":
+		var node_pos = _move_drag_segment.start_node.position if _move_drag_node_side else _move_drag_segment.end_node.position
+		var last = _move_drag_segment.curve.point_count - 1
+		var cur_handle = _move_drag_segment.curve.get_point_out(0) if _move_drag_node_side else _move_drag_segment.curve.get_point_in(last)
+		var length = cur_handle.length()
+		
+		var dir = (hit - node_pos).normalized()
+		var new_handle = dir * length
+		
+		if _move_drag_node_side:
+			_move_drag_segment.curve.set_point_out(0, new_handle)
+		else:
+			_move_drag_segment.curve.set_point_in(last, new_handle)
+		_move_drag_segment.rebuild_mesh()
+		
+		# Alt mirror
+		if Input.is_key_pressed(KEY_ALT):
+			var other_seg = _find_other_segment_at_node(_move_drag_segment, _move_drag_node_side)
+			if other_seg != null:
+				var o_last = other_seg.curve.point_count - 1
+				var o_handle = other_seg.curve.get_point_in(o_last) if _move_drag_node_side else other_seg.curve.get_point_out(0)
+				var o_len = o_handle.length()
+				var o_dir = -dir
+				if _move_drag_node_side:
+					other_seg.curve.set_point_in(o_last, o_dir * o_len)
+				else:
+					other_seg.curve.set_point_out(0, o_dir * o_len)
+				other_seg.rebuild_mesh()
+				
+	elif _move_drag_target == "segment":
+		var s = _move_drag_segment
+		var p0 = s.start_node.position
+		var p3 = s.end_node.position
+		var chord = p3 - p0
+		var chord_dir = chord.normalized()
+		var perp = Vector3(-chord_dir.z, 0, chord_dir.x)
+		
+		var to_mouse = hit - p0
+		var offset = to_mouse.dot(perp)
+		
+		var start_handles = _move_drag_start_handles[s]
+		var orig_offset = start_handles["out"].dot(perp)
+		
+		var delta_offset = offset - orig_offset
+		var h_offset = perp * delta_offset * 1.5
+		
+		var last = s.curve.point_count - 1
+		s.curve.set_point_out(0, start_handles["out"] + h_offset)
+		s.curve.set_point_in(last, start_handles["in"] - h_offset)
+		s.rebuild_mesh()
+
+func _move_click_released() -> void:
+	if not _move_is_dragging: return
+	_move_is_dragging = false
+	
+	var moved_segments: Array = []
+	for s in _move_backup_curves.keys():
+		moved_segments.append(s)
+		
+	if _is_move_valid(moved_segments):
+		# Accept changes
+		RoadGraph.graph_changed.emit()
+		cost_changed.emit(total_cost())
+	else:
+		# Revert
+		for n in _move_backup_nodes.keys():
+			n.position = _move_backup_nodes[n]
+		for s in _move_backup_curves.keys():
+			s.setup(s.road_type, _move_backup_curves[s])
+			
+		RoadGraph.graph_changed.emit()
+		cost_changed.emit(total_cost())
+		
+	_move_backup_curves.clear()
+	_move_backup_nodes.clear()
+	_move_drag_start_handles.clear()
+	_update_move_gizmos()
+
+func _is_move_valid(moved_segments: Array) -> bool:
+	for s1 in moved_segments:
+		var hw1 = s1.road_type.total_width() * 0.5
+		var len1 = s1.curve.get_baked_length()
+		var steps1 = maxi(4, int(len1 / 5.0))
+		
+		for s2 in RoadGraph.segments:
+			if s1 == s2 or s2 in moved_segments: continue
+			var hw2 = s2.road_type.total_width() * 0.5
+			var len2 = s2.curve.get_baked_length()
+			var steps2 = maxi(4, int(len2 / 5.0))
+			
+			for i in range(steps1):
+				var a0 = s1.curve.sample_baked((float(i)/steps1) * len1)
+				var a1 = s1.curve.sample_baked((float(i+1)/steps1) * len1)
+				for j in range(steps2):
+					var b0 = s2.curve.sample_baked((float(j)/steps2) * len2)
+					var b1 = s2.curve.sample_baked((float(j+1)/steps2) * len2)
+					var d = RoadOps._seg_seg_min_dist_2d(
+						Vector2(a0.x, a0.z), Vector2(a1.x, a1.z),
+						Vector2(b0.x, b0.z), Vector2(b1.x, b1.z)
+					)
+					if d < hw1 + hw2 - 0.01:
+						return false
+	return true
+
+func _find_other_segment_at_node(seg: RoadSegment, is_start: bool) -> RoadSegment:
+	var node = seg.start_node if is_start else seg.end_node
+	if node == null: return null
+	for entry in node.segment_ends:
+		var s = entry["segment"]
+		if s != seg:
+			return s
+	return null
+
+func _update_move_gizmos() -> void:
+	_clear_move_gizmos()
+	
+	if _move_selected_node != null:
+		_add_gizmo(_move_selected_node.position, Color.GREEN, 1.0)
+		for entry in _move_selected_node.segment_ends:
+			var seg = entry["segment"]
+			var is_start = entry["is_start"]
+			var last = seg.curve.point_count - 1
+			if is_start:
+				_add_gizmo(_move_selected_node.position + seg.curve.get_point_out(0), Color.CYAN, 0.5)
+			else:
+				_add_gizmo(_move_selected_node.position + seg.curve.get_point_in(last), Color.CYAN, 0.5)
+				
+	elif _move_selected_segment != null:
+		var last = _move_selected_segment.curve.point_count - 1
+		_add_gizmo(_move_selected_segment.start_node.position, Color.GREEN, 1.0)
+		_add_gizmo(_move_selected_segment.end_node.position, Color.GREEN, 1.0)
+		_add_gizmo(_move_selected_segment.start_node.position + _move_selected_segment.curve.get_point_out(0), Color.CYAN, 0.5)
+		_add_gizmo(_move_selected_segment.end_node.position + _move_selected_segment.curve.get_point_in(last), Color.CYAN, 0.5)
+
+func _add_gizmo(pos: Vector3, color: Color, radius: float) -> void:
+	var mesh = MeshInstance3D.new()
+	var sphere = SphereMesh.new()
+	sphere.radius = radius
+	sphere.height = radius * 2.0
+	mesh.mesh = sphere
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.no_depth_test = true
+	mesh.material_override = mat
+	mesh.position = pos + Vector3(0, 0.1, 0)
+	add_child(mesh)
+	_move_gizmos.append(mesh)
+
+func _clear_move_gizmos() -> void:
+	for g in _move_gizmos:
+		g.queue_free()
+	_move_gizmos.clear()

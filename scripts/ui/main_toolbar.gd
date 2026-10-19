@@ -42,6 +42,7 @@ func _ready() -> void:
 	_add_mode_button(row, "◇", 4, "Edit lane connections")
 	_add_mode_button(row, "⚑", 5, "Mark entries and exits")
 	_add_mode_button(row, "⇅", 6, "Update road type")
+	_add_mode_button(row, "✥", 7, "Move It tool (Drag nodes/handles)")
 
 	var sep := VSeparator.new()
 	row.add_child(sep)
