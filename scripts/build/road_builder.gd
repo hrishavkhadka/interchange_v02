@@ -289,6 +289,22 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 	_start_guide_dir = null
 	if start_node == end_node: return
 	
+	# Realign the curve to the exact snapped node positions.
+	# If the click was within 5m of an existing node, get_or_create snapped to it.
+	# The curve was built from the raw click position, so we must shift it to match.
+	if start_node.position.distance_to(_p_start) > 0.01 or end_node.position.distance_to(end_pos) > 0.01:
+		var delta_start = start_node.position - _p_start
+		var delta_end = end_node.position - end_pos
+		
+		var last_idx = curve.point_count - 1
+		if last_idx >= 0:
+			# Move start point and its out handle
+			curve.set_point_position(0, start_node.position)
+			curve.set_point_out(0, curve.get_point_out(0) + delta_start)
+			# Move end point and its in handle
+			curve.set_point_position(last_idx, end_node.position)
+			curve.set_point_in(last_idx, curve.get_point_in(last_idx) + delta_end)
+	
 	var length := curve.get_baked_length()
 	var target_step := road_type.lane_width * 16.0
 	var count := maxi(1, int(round(length / target_step)))
@@ -303,7 +319,6 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 				_create_segment_with_curve(prev_node, end_node, road_type, CurveMath.slice(curve, (i-1)*actual_step, length))
 			else:
 				var pos := curve.sample_baked(i * actual_step)
-				# force_new=true prevents snapping, ensuring the node perfectly matches the mesh end
 				var mid := RoadGraph.get_or_create(pos, true, true)
 				_create_segment_with_curve(prev_node, mid, road_type, CurveMath.slice(curve, (i-1)*actual_step, i*actual_step))
 				prev_node = mid
@@ -510,8 +525,18 @@ func _find_segment_under_cursor() -> RoadSegment:
 	for s in RoadGraph.segments:
 		if not is_instance_valid(s): continue
 		if s.curve == null or s.road_type == null: continue
+		
 		var length: float = s.curve.get_baked_length()
-		# Removed the length < 0.1 check so tiny segments can be selected
+		
+		# If length is extremely small, just use the node position
+		if length < 0.1:
+			if s.start_node != null:
+				var d: float = Vector2(s.start_node.position.x - hit.x, s.start_node.position.z - hit.z).length()
+				if d < best_dist:
+					best_dist = d
+					best = s
+			continue
+			
 		var samples: int = maxi(2, int(length * 0.5))
 		for i in range(samples + 1):
 			var t: float = float(i) / float(samples)
