@@ -403,22 +403,22 @@ func _cancel() -> void:
 # ---------------------------------------------------------------- math
 
 func _build_c_curve(p0: Vector3, p1: Vector3, p2: Vector3) -> Curve3D:
+	# Quadratic Bezier P0–C–P2 represented exactly as a cubic Bezier:
+	#   out_handle(0) = 2/3 * (C - P0)
+	#   in_handle(1)  = 2/3 * (C - P2)
+	# The curve is *pulled toward* p1 but does not pass through it (CS2 control-point semantics).
 	var c := Curve3D.new()
-	c.add_point(p0)
-	c.add_point(p0 + (p1 - p0) * 2.0 / 3.0)
-	c.add_point(p2 + (p1 - p2) * 2.0 / 3.0)
-	c.add_point(p2)
+	c.add_point(p0, Vector3.ZERO, (p1 - p0) * 2.0 / 3.0)
+	c.add_point(p2, (p1 - p2) * 2.0 / 3.0, Vector3.ZERO)
 	return c
 
 func _build_s_curve(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3) -> Curve3D:
+	# Cubic Bezier P0–C1–C2–P3:
+	#   out_handle(0) = C1 - P0
+	#   in_handle(1)  = C2 - P3
 	var c := Curve3D.new()
-	c.add_point(p0)
-	c.add_point(p0 + (p1 - p0) * 2.0 / 3.0)
-	c.add_point(p1)
-	c.add_point(p1 + (p2 - p1) * 2.0 / 3.0)
-	c.add_point(p2)
-	c.add_point(p3 + (p2 - p3) * 2.0 / 3.0)
-	c.add_point(p3)
+	c.add_point(p0, Vector3.ZERO, p1 - p0)
+	c.add_point(p3, p2 - p3, Vector3.ZERO)
 	return c
 
 # ---------------------------------------------------------------- utils
