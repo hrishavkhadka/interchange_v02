@@ -172,22 +172,14 @@ func _start_drag() -> void:
 func _click_end_straight() -> void:
 	var hit_raw: Variant = _ground_hit()
 	if hit_raw == null: return
-	var hit: Vector3 = hit_raw
-	var r := _resolve_end(hit, _p_start, _start_t_segment, _start_guide_dir)
+	var r := _resolve_end(hit_raw, _p_start, _start_t_segment, _start_guide_dir)
 	_p_end = r["point"]
 	_end_t_segment = r["t_segment"]
 	
 	if _p_start.distance_to(_p_end) < road_type.lane_width: return
+	var curve := _two_point_curve(_p_start, _p_end)
+	if not _is_placement_valid(_p_start, _p_end, _start_t_segment, _end_t_segment, curve): return
 	
-	var t_targets: Array = []
-	if _start_t_segment != null: t_targets.append(_start_t_segment)
-	if _end_t_segment != null: t_targets.append(_end_t_segment)
-		
-	var sharing := _sharing_nodes(_p_start, _p_end, t_targets)
-	var hw: float = road_type.total_width() * 0.5
-	if not RoadOps.is_placement_valid(_p_start, _p_end, hw, t_targets, sharing): return
-	
-	# Commit
 	_stage = BuildStage.NONE
 	_destroy_preview()
 	_snap_indicator.hide_indicator()
@@ -226,22 +218,18 @@ func _click_curve_mid() -> void:
 func _click_curve_end() -> void:
 	var hit_raw: Variant = _ground_hit()
 	if hit_raw == null: return
-	var hit: Vector3 = hit_raw
-	var r := _resolve_end(hit, _p_mid1, null, null)
+	var r := _resolve_end(hit_raw, _p_mid1, null, null)
 	_p_end = r["point"]
 	_end_t_segment = r["t_segment"]
 	
 	if _p_start.distance_to(_p_end) < road_type.lane_width: return
+	var curve := _build_c_curve(_p_start, _p_mid1, _p_end)
+	if not _is_placement_valid(_p_start, _p_end, _start_t_segment, _end_t_segment, curve): return
 	
 	var t_targets: Array = []
 	if _start_t_segment != null: t_targets.append(_start_t_segment)
 	if _end_t_segment != null: t_targets.append(_end_t_segment)
-		
 	var sharing := _sharing_nodes(_p_start, _p_end, t_targets)
-	var hw: float = road_type.total_width() * 0.5
-	if not RoadOps.is_placement_valid(_p_start, _p_end, hw, t_targets, sharing): return
-	
-	var curve := _build_c_curve(_p_start, _p_mid1, _p_end)
 	_commit_curve_data(curve, _p_end, t_targets, sharing)
 
 func _click_scurve_mid1() -> void:
@@ -263,22 +251,18 @@ func _click_scurve_mid2() -> void:
 func _commit_scurve_preview() -> void:
 	var hit_raw: Variant = _ground_hit()
 	if hit_raw == null: return
-	var hit: Vector3 = hit_raw
-	var r := _resolve_end(hit, _p_mid2, null, null)
+	var r := _resolve_end(hit_raw, _p_mid2, null, null)
 	_p_end = r["point"]
 	_end_t_segment = r["t_segment"]
 	
 	if _p_start.distance_to(_p_end) < road_type.lane_width: return
+	var curve := _build_s_curve(_p_start, _p_mid1, _p_mid2, _p_end)
+	if not _is_placement_valid(_p_start, _p_end, _start_t_segment, _end_t_segment, curve): return
 	
 	var t_targets: Array = []
 	if _start_t_segment != null: t_targets.append(_start_t_segment)
 	if _end_t_segment != null: t_targets.append(_end_t_segment)
-		
 	var sharing := _sharing_nodes(_p_start, _p_end, t_targets)
-	var hw: float = road_type.total_width() * 0.5
-	if not RoadOps.is_placement_valid(_p_start, _p_end, hw, t_targets, sharing): return
-	
-	var curve := _build_s_curve(_p_start, _p_mid1, _p_mid2, _p_end)
 	_commit_curve_data(curve, _p_end, t_targets, sharing)
 
 func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, sharing: Array) -> void:
@@ -404,23 +388,8 @@ func _update() -> void:
 		_snap_indicator.show_at(_p_end)
 
 func _validate_preview(start: Vector3, end: Vector3, t_start: Variant, t_end: Variant) -> void:
-	var t_targets: Array = []
-	if t_start != null: t_targets.append(t_start)
-	if t_end != null: t_targets.append(t_end)
-	var sharing := _sharing_nodes(start, end, t_targets)
-	var hw: float = road_type.total_width() * 0.5
-	var valid := RoadOps.is_placement_valid(start, end, hw, t_targets, sharing)
-	
-	if valid and _would_sharp_bend(start, end, t_start, t_end):
-		valid = false
-		
-	# Add minimum radius check
-	if valid and _preview != null and _preview.curve != null:
-		var min_r := _get_min_radius(_preview.curve)
-		var req_r := hw + (1.5 * road_type.lane_width)
-		if min_r < req_r:
-			valid = false
-			
+	if _preview == null or _preview.curve == null: return
+	var valid := _is_placement_valid(start, end, t_start, t_end, _preview.curve)
 	_preview.set_preview_validity(valid)
 
 func _cancel() -> void:
@@ -849,3 +818,19 @@ func _get_radius_at(curve: Curve3D, t: float) -> float:
 		
 	var avg_len := (len1 + len2) * 0.5
 	return avg_len / angle
+
+func _is_placement_valid(start: Vector3, end: Vector3, t_start: Variant, t_end: Variant, curve: Curve3D) -> bool:
+	var t_targets: Array = []
+	if t_start != null: t_targets.append(t_start)
+	if t_end != null: t_targets.append(t_end)
+	var sharing := _sharing_nodes(start, end, t_targets)
+	var hw: float = road_type.total_width() * 0.5
+	var valid := RoadOps.is_placement_valid(start, end, hw, t_targets, sharing)
+	if valid and _would_sharp_bend(start, end, t_start, t_end):
+		valid = false
+	if valid and curve != null:
+		var min_r := _get_min_radius(curve)
+		var req_r := hw + (1.5 * road_type.lane_width)
+		if min_r < req_r:
+			valid = false
+	return valid
