@@ -306,9 +306,12 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 	if start_node == end_node: return
 	
 	var length := curve.get_baked_length()
-	# Match straight road waypoint spacing (~96m) to reduce waypoint density.
-	var step := road_type.lane_width * WAYPOINT_SPACING_LANES
-	var count := maxi(1, int(ceil(length / step)))
+	# 1/4 of the initial density (4.0 * 4 = 16.0 lanes)
+	var target_step := road_type.lane_width * 16.0
+	var count := maxi(1, int(round(length / target_step)))
+	
+	# Evenly divide the length so there are no leftover "tiny" segments
+	var actual_step := length / float(count)
 	
 	if count == 1:
 		_create_segment_with_curve(start_node, end_node, road_type, curve)
@@ -316,11 +319,11 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 		var prev_node := start_node
 		for i in range(1, count + 1):
 			if i == count:
-				_create_segment_with_curve(prev_node, end_node, road_type, CurveMath.slice(curve, (i-1)*step, length))
+				_create_segment_with_curve(prev_node, end_node, road_type, CurveMath.slice(curve, (i-1)*actual_step, length))
 			else:
-				var pos := curve.sample_baked(i * step)
+				var pos := curve.sample_baked(i * actual_step)
 				var mid := RoadGraph.get_or_create_waypoint(pos)
-				_create_segment_with_curve(prev_node, mid, road_type, CurveMath.slice(curve, (i-1)*step, i*step))
+				_create_segment_with_curve(prev_node, mid, road_type, CurveMath.slice(curve, (i-1)*actual_step, i*actual_step))
 				prev_node = mid
 				
 	cost_changed.emit(total_cost())

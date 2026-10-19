@@ -37,18 +37,24 @@ func is_pass_through() -> bool:
 		var seg: RoadSegment = e["segment"]
 		if seg == null:
 			return false
-		var other: RoadNode
-		if e["is_start"]:
-			other = seg.end_node
-		else:
-			other = seg.start_node
-		if other == null:
+		
+		var length := seg.curve.get_baked_length()
+		if length < 0.1:
 			return false
-		var d: Vector3 = other.position - position
+			
+		var d: Vector3
+		if e["is_start"]:
+			# Tangent pointing OUT of the segment at the start
+			d = seg.curve.sample_baked(minf(length, 0.1)) - position
+		else:
+			# Tangent pointing OUT of the segment at the end
+			d = position - seg.curve.sample_baked(maxf(0.0, length - 0.1))
+			
 		d.y = 0.0
 		if d.length_squared() < 0.01:
 			return false
 		dirs.append(d.normalized())
+		
 	var ang: float = dirs[0].angle_to(dirs[1])
 	return ang > deg_to_rad(PASS_THROUGH_ANGLE_DEG)
 
