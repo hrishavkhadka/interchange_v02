@@ -306,11 +306,11 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 	if start_node == end_node: return
 	
 	var length := curve.get_baked_length()
-	# 1/4 of the initial density (4.0 * 4 = 16.0 lanes)
+	# 1/4 of the original density (4.0 * 4.0 = 16.0 lanes)
 	var target_step := road_type.lane_width * 16.0
 	var count := maxi(1, int(round(length / target_step)))
 	
-	# Evenly divide the length so there are no leftover "tiny" segments
+	# Evenly divide the length so there are no leftover "tiny" segments at the end
 	var actual_step := length / float(count)
 	
 	if count == 1:
