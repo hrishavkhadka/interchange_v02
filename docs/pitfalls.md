@@ -23,7 +23,7 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 
 **Detected in:** Phase 1/4
 **Files:** `scripts/build/road_builder.gd` — `_build_c_curve`, `_build_s_curve`
-**Status:** fixed (pending in-game verification)
+**Status:** fixed
 
 ---
 
@@ -60,3 +60,24 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 **Detected in:** Phase 1/4 diagnosis
 **Files:** `scripts/build/road_builder.gd` — `_update`
 **Status:** open (Phase 4/4)
+
+## RoadNode — Tight curves create junctions instead of waypoints
+**Cause:** `is_pass_through()` checked the angle between the segment endpoints (the chord), not the actual curve tangents.
+**Fix:** Calculate the actual tangent using the Bezier control handles (`get_point_in` / `get_point_out`). For straight roads (which returned zero-length baked tangents), fallback to chord direction.
+**Detected in:** Phase 1/4
+**Files:** `scripts/core/road_node.gd`
+**Status:** fixed
+
+## Curve Math — Waypoint nodes snap to previous nodes on tight curves
+**Cause:** `RoadGraph.get_or_create_waypoint()` snaps to existing nodes within 5.0m. On tight curves, the waypoint was closer than 5m to the start point, so the node was placed at the start, leaving the mesh geometry separated from the node.
+**Fix:** Added `force_new` parameter to `get_or_create()`. Internal curve waypoints now force a new node at the exact curve position.
+**Detected in:** Phase 1/4
+**Files:** `scripts/core/road_graph.gd`, `scripts/build/road_builder.gd`
+**Status:** fixed
+
+## RoadBuilder — Sharp curves invert the inner mesh
+**Cause:** If the radius of curvature is smaller than the half-width of the road, the inner edge of the curve crosses over itself, creating bowtie faces that disappear under backface culling.
+**Fix:** Added `_get_min_radius()` to sample curvature. `_validate_preview()` now rejects placements where minimum radius < `half_width + 1.5 * lane_width`.
+**Detected in:** Phase 1/4
+**Files:** `scripts/build/road_builder.gd`
+**Status:** fixed

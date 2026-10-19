@@ -410,8 +410,17 @@ func _validate_preview(start: Vector3, end: Vector3, t_start: Variant, t_end: Va
 	var sharing := _sharing_nodes(start, end, t_targets)
 	var hw: float = road_type.total_width() * 0.5
 	var valid := RoadOps.is_placement_valid(start, end, hw, t_targets, sharing)
+	
 	if valid and _would_sharp_bend(start, end, t_start, t_end):
 		valid = false
+		
+	# Add minimum radius check
+	if valid and _preview != null and _preview.curve != null:
+		var min_r := _get_min_radius(_preview.curve)
+		var req_r := hw + (1.5 * road_type.lane_width)
+		if min_r < req_r:
+			valid = false
+			
 	_preview.set_preview_validity(valid)
 
 func _cancel() -> void:
@@ -798,3 +807,45 @@ func _ground_hit() -> Variant:
 	hit.x = clampf(hit.x, -level_half_size, level_half_size)
 	hit.z = clampf(hit.z, -level_half_size, level_half_size)
 	return hit
+
+func _get_min_radius(curve: Curve3D) -> float:
+	var min_r := INF
+	var length := curve.get_baked_length()
+	var steps := 24 # Enough to catch tight curves
+	for i in range(steps + 1):
+		var t := float(i) / float(steps)
+		var r := _get_radius_at(curve, t)
+		if r < min_r:
+			min_r = r
+	return min_r
+
+func _get_radius_at(curve: Curve3D, t: float) -> float:
+	var dt := 0.01
+	var t0 := clampf(t - dt, 0.0, 1.0)
+	var t1 := clampf(t + dt, 0.0, 1.0)
+	
+	var p0 := curve.sample_baked(t0 * curve.get_baked_length())
+	var p1 := curve.sample_baked(t * curve.get_baked_length())
+	var p2 := curve.sample_baked(t1 * curve.get_baked_length())
+	
+	p0.y = 0.0
+	p1.y = 0.0
+	p2.y = 0.0
+	
+	var v1 := p1 - p0
+	var v2 := p2 - p1
+	var len1 := v1.length()
+	var len2 := v2.length()
+	if len1 < 0.001 or len2 < 0.001:
+		return INF
+		
+	v1 = v1.normalized()
+	v2 = v2.normalized()
+	
+	var dot := clampf(v1.dot(v2), -1.0, 1.0)
+	var angle := acos(dot)
+	if angle < 0.001:
+		return INF # Straight line, infinite radius
+		
+	var avg_len := (len1 + len2) * 0.5
+	return avg_len / angle

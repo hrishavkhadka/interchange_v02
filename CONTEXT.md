@@ -73,7 +73,7 @@ Levels are saved as JSON in `user://levels/`:
   - Save/load (F9/F10 quick save + named saves via buttons).
   - Curved road drawing (C-curves and S-curves) via multi-click placement + road shape sub-menu on the Road tool.
 - **In progress — curve roads (Phase 1/4 → 4/4)**:
-  - [ ] **Phase 1/4 — Curve geometry.** Real cubic Bezier handles for C- and S-curves. _Code written; awaiting in-game verification._
+  - [x] **Phase 1/4 — Curve geometry & builder.** Real Bézier handles, curve passes through mid-click, correct click sequence, finer waypoint spacing, straight preview fixed, pass-through tangents fixed, minimum radius check added.
   - [ ] **Phase 2/4 — Curve-aware hit detection.** `RoadOps` projection: chord → `Curve3D`.
   - [ ] **Phase 3/4 — Curve-preserving split.** `_split_existing_segment` uses `CurveMath.slice`.
   - [ ] **Phase 4/4 — S-curve preview.** Fix `SCURVE_MID2` degenerate preview.
