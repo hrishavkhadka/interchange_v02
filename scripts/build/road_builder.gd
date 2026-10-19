@@ -666,18 +666,69 @@ func _absorb_waypoint(w: RoadNode) -> RoadSegment:
 	var seg_b: RoadSegment = w.segment_ends[1]["segment"]
 	if seg_a == null or seg_b == null: return null
 	if not is_instance_valid(seg_a) or not is_instance_valid(seg_b): return null
+	
 	var a_is_start: bool = w.segment_ends[0]["is_start"]
 	var other_a: RoadNode = seg_a.end_node if a_is_start else seg_a.start_node
 	var b_is_start: bool = w.segment_ends[1]["is_start"]
 	var other_b: RoadNode = seg_b.end_node if b_is_start else seg_b.start_node
 	if other_a == null or other_b == null: return null
+	
 	var rt: RoadType = seg_a.road_type
 	if seg_b.road_type != null:
 		if rt == null or seg_b.road_type.lane_count() > rt.lane_count(): rt = seg_b.road_type
+	
+	# Check if either segment actually has curvature (non-zero handles)
+	var is_curved := _segment_has_curve(seg_a) or _segment_has_curve(seg_b)
+	
+	var a_from_out := Vector3.ZERO
+	var a_to_in := Vector3.ZERO
+	var b_from_out := Vector3.ZERO
+	var b_to_in := Vector3.ZERO
+	
+	if is_curved:
+		var a_info := _get_segment_handles(seg_a, other_a, w)
+		var b_info := _get_segment_handles(seg_b, w, other_b)
+		a_from_out = a_info["from_out"]
+		a_to_in = a_info["to_in"]
+		b_from_out = b_info["from_out"]
+		b_to_in = b_info["to_in"]
+	
 	_detach_and_remove(seg_a)
 	_detach_and_remove(seg_b)
+	var w_pos := w.position
 	RoadGraph.nodes.erase(w)
+	
+	if is_curved:
+		# Build a 3-point curve: other_a → w → other_b, preserving tangents.
+		# Then _split_existing_segment slices it at _p_start, effectively
+		# moving the waypoint smoothly to the new click position.
+		var curve := Curve3D.new()
+		curve.add_point(other_a.position, Vector3.ZERO, a_from_out)
+		curve.add_point(w_pos, a_to_in, b_from_out)
+		curve.add_point(other_b.position, b_to_in, Vector3.ZERO)
+		return _create_segment_with_curve(other_a, other_b, rt, curve)
+	
 	return _create_segment(other_a, other_b, rt)
+
+func _segment_has_curve(seg: RoadSegment) -> bool:
+	if seg.curve == null or seg.curve.point_count < 2: return false
+	var n := seg.curve.point_count - 1
+	return seg.curve.get_point_out(0).length_squared() > 0.001 \
+		or seg.curve.get_point_in(n).length_squared() > 0.001
+
+func _get_segment_handles(seg: RoadSegment, from_node: RoadNode, to_node: RoadNode) -> Dictionary:
+	var c := seg.curve
+	var n := c.point_count - 1
+	if from_node == seg.start_node:
+		return {
+			"from_out": c.get_point_out(0),
+			"to_in": c.get_point_in(n),
+		}
+	else:
+		return {
+			"from_out": -c.get_point_in(n),
+			"to_in": -c.get_point_out(0),
+		}
 
 func _create_chain(start_node: RoadNode, end_node: RoadNode, rt: RoadType) -> void:
 	if start_node == end_node: return
@@ -745,10 +796,19 @@ func _split_existing_segment(seg: RoadSegment, at: Vector3) -> void:
 	var old_start := seg.start_node
 	var old_end := seg.end_node
 	var rt := seg.road_type
+	
+	var length := seg.curve.get_baked_length()
+	var res := RoadOps._get_closest_point_on_curve(at, seg.curve, length)
+	var split_point: Vector3 = res["point"]
+	var bake_dist: float = res["bake"]
+	
+	if bake_dist < 0.1 or bake_dist > length - 0.1: return
+	
 	_detach_and_remove(seg)
-	var mid := RoadGraph.get_or_create(at)
-	_create_chain(old_start, mid, rt)
-	_create_chain(mid, old_end, rt)
+	var mid := RoadGraph.get_or_create(split_point, false, true)
+	
+	_create_segment_with_curve(old_start, mid, rt, CurveMath.slice(seg.curve, 0, bake_dist))
+	_create_segment_with_curve(mid, old_end, rt, CurveMath.slice(seg.curve, bake_dist, length))
 
 func _detach_and_remove(seg: RoadSegment) -> void:
 	var sn := seg.start_node

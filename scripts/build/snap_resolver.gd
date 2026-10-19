@@ -28,10 +28,11 @@ static func resolve_position(raw: Vector3, settings: BuildSettings, road_type: R
 		if s != null:
 			var seg: RoadSegment = s["segment"]
 			var p: Vector3 = s["point"]
+			var b_d: float = s.get("bake_dist", -1.0)
 			if p.distance_to(seg.start_node.position) > 1.0 \
 					and p.distance_to(seg.end_node.position) > 1.0:
-				return { "point": p, "kind": "segment", "t_segment": seg, "guide_dir": null }
-
+				return { "point": p, "kind": "segment", "t_segment": seg, "bake_dist": b_d, "guide_dir": null }
+				
 	if settings.snap_guide and road_type != null:
 		var snap_ticks: bool = settings.snap_length
 		var gp: Variant = _try_guide_snap(raw, road_type.lane_width, snap_ticks)
