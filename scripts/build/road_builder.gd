@@ -319,11 +319,15 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 				_create_segment_with_curve(prev_node, end_node, road_type, CurveMath.slice(curve, (i-1)*actual_step, length))
 			else:
 				var pos := curve.sample_baked(i * actual_step)
+				# force_new=true prevents snapping, ensuring the node perfectly matches the mesh end
 				var mid := RoadGraph.get_or_create(pos, true, true)
 				_create_segment_with_curve(prev_node, mid, road_type, CurveMath.slice(curve, (i-1)*actual_step, i*actual_step))
 				prev_node = mid
 				
 	cost_changed.emit(total_cost())
+	
+	# Clean up any zero-length segments created by snapping
+	_cleanup_degenerate_segments()
 
 func _update() -> void:
 	var hit_raw: Variant = _ground_hit()
@@ -419,20 +423,21 @@ func _cancel() -> void:
 # ---------------------------------------------------------------- math
 
 func _build_c_curve(p0: Vector3, p1: Vector3, p2: Vector3) -> Curve3D:
-	# p1 is the control point (mid-click). Using it directly ensures the
-	# curve starts tangent to p0->p1 and ends tangent to p1->p2.
-	# The curve will naturally pass through the midpoint between p1 and
-	# the chord p0-p2, which matches the desired CS2 behavior.
-	var c := p1
+	# Creates a 3-point Catmull-Rom spline. By passing the mid-click (p1) as an 
+	# actual point on the curve (rather than just a control point), we increase 
+	# the degree of the curve. This distributes the curvature and prevents 
+	# sharp mesh inversion on tight turns.
+	var c := Curve3D.new()
 	
-	# Convert quadratic (P0, C, P2) to cubic (P0, out_handle(0), in_handle(2), P2)
-	var out_h := (c - p0) * 2.0 / 3.0
-	var in_h := (c - p2) * 2.0 / 3.0
+	var d_p = (p1 - p0)
+	var d_q = (p2 - p0) * 0.5
+	var d_r = (p2 - p1)
 	
-	var curve := Curve3D.new()
-	curve.add_point(p0, Vector3.ZERO, out_h)
-	curve.add_point(p2, in_h, Vector3.ZERO)
-	return curve
+	# Add P, Q, and R as points, setting their in/out handles for a smooth join.
+	c.add_point(p0, Vector3.ZERO, d_p * 0.5)
+	c.add_point(p1, -d_q * 0.5, d_q * 0.5)
+	c.add_point(p2, -d_r * 0.5, Vector3.ZERO)
+	return c
 
 func _build_s_curve(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3) -> Curve3D:
 	# Cubic Bezier P0–C1–C2–P3:
@@ -859,3 +864,13 @@ func _is_placement_valid(start: Vector3, end: Vector3, t_start: Variant, t_end: 
 		if min_r < req_r:
 			valid = false
 	return valid
+
+func _cleanup_degenerate_segments() -> void:
+	var to_remove: Array[RoadSegment] = []
+	for s in RoadGraph.segments:
+		if not is_instance_valid(s): continue
+		# If the segment has zero length, it's an invisible remnant
+		if s.curve.get_baked_length() < 0.1:
+			to_remove.append(s)
+	for s in to_remove:
+		_remove_segment_and_cleanup(s)
