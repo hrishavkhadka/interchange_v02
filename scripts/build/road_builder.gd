@@ -5,7 +5,7 @@ signal cost_changed(total_cost: float)
 signal road_type_changed(index: int, name: String)
 
 enum Mode { POINTER = 0, ROAD = 1, DEMOLISH = 2, REVERSE = 3, UPDATE = 4 }
-enum BuildStage { NONE, STRAIGHT_END, CURVE_END, CURVE_BEND, SCURVE_MID1, SCURVE_MID2, SCURVE_END }
+enum BuildStage { NONE, STRAIGHT_END, CURVE_MID, CURVE_END, SCURVE_MID1, SCURVE_MID2, SCURVE_END }
 
 const MIN_BEND_DOT: float = 0.87
 const WAYPOINT_SPACING_LANES: float = 30.0
@@ -127,10 +127,10 @@ func _handle_left_click() -> void:
 		_start_drag()
 	elif _stage == BuildStage.STRAIGHT_END:
 		_click_end_straight()
+	elif _stage == BuildStage.CURVE_MID:
+		_click_curve_mid()
 	elif _stage == BuildStage.CURVE_END:
-		_click_end_curve()
-	elif _stage == BuildStage.CURVE_BEND:
-		_commit_curve_preview()
+		_click_curve_end()
 	elif _stage == BuildStage.SCURVE_MID1:
 		_click_scurve_mid1()
 	elif _stage == BuildStage.SCURVE_MID2:
@@ -160,7 +160,7 @@ func _start_drag() -> void:
 	if settings.road_shape == BuildSettings.RoadShape.STRAIGHT:
 		_stage = BuildStage.STRAIGHT_END
 	elif settings.road_shape == BuildSettings.RoadShape.CURVE:
-		_stage = BuildStage.CURVE_END
+		_stage = BuildStage.CURVE_MID
 	else:
 		_stage = BuildStage.SCURVE_MID1
 		
@@ -213,8 +213,17 @@ func _click_end_straight() -> void:
 	_create_chain(start_node, end_node, road_type)
 	cost_changed.emit(total_cost())
 
-func _click_end_curve() -> void:
-	# User clicked the end point. Now transitioning to BEND stage
+func _click_curve_mid() -> void:
+	var hit_raw: Variant = _ground_hit()
+	if hit_raw == null: return
+	var hit: Vector3 = hit_raw
+	var r := SnapResolver.resolve_position(hit, settings, road_type)
+	_p_mid1 = r["point"]
+	
+	if _p_start.distance_to(_p_mid1) < road_type.lane_width: return
+	_stage = BuildStage.CURVE_END
+
+func _click_curve_end() -> void:
 	var hit_raw: Variant = _ground_hit()
 	if hit_raw == null: return
 	var hit: Vector3 = hit_raw
@@ -223,13 +232,6 @@ func _click_end_curve() -> void:
 	_end_t_segment = r["t_segment"]
 	
 	if _p_start.distance_to(_p_end) < road_type.lane_width: return
-	_stage = BuildStage.CURVE_BEND
-
-func _commit_curve_preview() -> void:
-	# User clicked to finalize the C-curve
-	var hit_raw: Variant = _ground_hit()
-	if hit_raw == null: return
-	var hit: Vector3 = hit_raw
 	
 	var t_targets: Array = []
 	if _start_t_segment != null: t_targets.append(_start_t_segment)
@@ -302,7 +304,8 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 	if start_node == end_node: return
 	
 	var length := curve.get_baked_length()
-	var step := road_type.lane_width * WAYPOINT_SPACING_LANES
+	# For curves, use a smaller step so they split into more segments (~4 lanes = 12.8m).
+	var step := road_type.lane_width * 4.0
 	var count := maxi(1, int(ceil(length / step)))
 	
 	if count == 1:
@@ -326,7 +329,7 @@ func _update() -> void:
 	var hit: Vector3 = hit_raw
 	_guidelines.update(hit, road_type)
 	
-	if _stage == BuildStage.CURVE_END:
+	if _stage == BuildStage.STRAIGHT_END:
 		var final := _resolve_end(hit)
 		var preview_end: Vector3 = final["point"]
 		if _p_start.distance_to(preview_end) < road_type.lane_width:
@@ -338,14 +341,30 @@ func _update() -> void:
 		_validate_preview(_p_start, preview_end, _start_t_segment, final["t_segment"])
 		_snap_indicator.show_at(preview_end)
 		
-	elif _stage == BuildStage.CURVE_BEND:
-		_p_mid1 = hit
-		var curve := _build_c_curve(_p_start, _p_mid1, _p_end)
+	elif _stage == BuildStage.CURVE_MID:
+		var final := _resolve_end(hit)
+		var preview_mid: Vector3 = final["point"]
+		if _p_start.distance_to(preview_mid) < road_type.lane_width:
+			_preview.visible = false
+			_snap_indicator.hide_indicator()
+			return
 		_preview.visible = true
-		_preview.setup(road_type, curve)
-		_validate_preview(_p_start, _p_end, _start_t_segment, _end_t_segment)
-		_snap_indicator.show_at(_p_end)
-
+		_preview.setup(road_type, _two_point_curve(_p_start, preview_mid))
+		_validate_preview(_p_start, preview_mid, _start_t_segment, final["t_segment"])
+		_snap_indicator.show_at(preview_mid)
+		
+	elif _stage == BuildStage.CURVE_END:
+		var final := _resolve_end(hit)
+		var preview_end: Vector3 = final["point"]
+		if _p_start.distance_to(preview_end) < road_type.lane_width:
+			_preview.visible = false
+			_snap_indicator.hide_indicator()
+			return
+		_preview.visible = true
+		_preview.setup(road_type, _build_c_curve(_p_start, _p_mid1, preview_end))
+		_validate_preview(_p_start, preview_end, _start_t_segment, final["t_segment"])
+		_snap_indicator.show_at(preview_end)
+		
 	elif _stage == BuildStage.SCURVE_MID1:
 		var final := _resolve_end(hit)
 		var preview_end: Vector3 = final["point"]
@@ -403,14 +422,18 @@ func _cancel() -> void:
 # ---------------------------------------------------------------- math
 
 func _build_c_curve(p0: Vector3, p1: Vector3, p2: Vector3) -> Curve3D:
-	# Quadratic Bezier P0–C–P2 represented exactly as a cubic Bezier:
-	#   out_handle(0) = 2/3 * (C - P0)
-	#   in_handle(1)  = 2/3 * (C - P2)
-	# The curve is *pulled toward* p1 but does not pass through it (CS2 control-point semantics).
-	var c := Curve3D.new()
-	c.add_point(p0, Vector3.ZERO, (p1 - p0) * 2.0 / 3.0)
-	c.add_point(p2, (p1 - p2) * 2.0 / 3.0, Vector3.ZERO)
-	return c
+	# p1 is the desired point the curve must pass through at t=0.5 (the mid-click).
+	# Calculate the quadratic control point C so that the curve hits p1 at t=0.5.
+	var c := 2.0 * p1 - 0.5 * (p0 + p2)
+	
+	# Convert quadratic (P0, C, P2) to cubic (P0, out_handle(0), in_handle(2), P2)
+	var out_h := (c - p0) * 2.0 / 3.0
+	var in_h := (c - p2) * 2.0 / 3.0
+	
+	var curve := Curve3D.new()
+	curve.add_point(p0, Vector3.ZERO, out_h)
+	curve.add_point(p2, in_h, Vector3.ZERO)
+	return curve
 
 func _build_s_curve(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3) -> Curve3D:
 	# Cubic Bezier P0–C1–C2–P3:
