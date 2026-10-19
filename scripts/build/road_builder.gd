@@ -230,7 +230,7 @@ func _click_curve_end() -> void:
 	if _start_t_segment != null: t_targets.append(_start_t_segment)
 	if _end_t_segment != null: t_targets.append(_end_t_segment)
 	var sharing := _sharing_nodes(_p_start, _p_end, t_targets)
-	_commit_curve_data(curve, _p_end, t_targets, sharing)
+	_commit_curve_data(curve, _p_start, _p_end, t_targets, sharing, false)
 
 func _click_scurve_mid1() -> void:
 	var hit_raw: Variant = _ground_hit()
@@ -263,9 +263,9 @@ func _commit_scurve_preview() -> void:
 	if _start_t_segment != null: t_targets.append(_start_t_segment)
 	if _end_t_segment != null: t_targets.append(_end_t_segment)
 	var sharing := _sharing_nodes(_p_start, _p_end, t_targets)
-	_commit_curve_data(curve, _p_end, t_targets, sharing)
+	_commit_curve_data(curve, _p_start, _p_end, t_targets, sharing, true)
 
-func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, sharing: Array) -> void:
+func _commit_curve_data(curve: Curve3D, start_pos: Vector3, end_pos: Vector3, t_targets: Array, sharing: Array, is_s_curve: bool) -> void:
 	_stage = BuildStage.NONE
 	_destroy_preview()
 	_snap_indicator.hide_indicator()
@@ -273,8 +273,8 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 	_guidelines.clear()
 	
 	if _start_t_segment != null:
-		var seg_after_start: Variant = _absorb_chain(_start_t_segment, _p_start)
-		if seg_after_start != null: _split_existing_segment(seg_after_start, _p_start)
+		var seg_after_start: Variant = _absorb_chain(_start_t_segment, start_pos)
+		if seg_after_start != null: _split_existing_segment(seg_after_start, start_pos)
 		
 	var end_seg: Variant = null
 	var reloc: Variant = RoadOps.find_segment_under_point(end_pos)
@@ -283,27 +283,18 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 		var seg_after_end: Variant = _absorb_chain(end_seg, end_pos)
 		if seg_after_end != null: _split_existing_segment(seg_after_end, end_pos)
 
-	var start_node := RoadGraph.get_or_create(_p_start)
+	var start_node := RoadGraph.get_or_create(start_pos)
 	var end_node := RoadGraph.get_or_create(end_pos)
 	_start_t_segment = null
 	_start_guide_dir = null
 	if start_node == end_node: return
 	
-	# Realign the curve to the exact snapped node positions.
-	# If the click was within 5m of an existing node, get_or_create snapped to it.
-	# The curve was built from the raw click position, so we must shift it to match.
-	if start_node.position.distance_to(_p_start) > 0.01 or end_node.position.distance_to(end_pos) > 0.01:
-		var delta_start = start_node.position - _p_start
-		var delta_end = end_node.position - end_pos
-		
-		var last_idx = curve.point_count - 1
-		if last_idx >= 0:
-			# Move start point and its out handle
-			curve.set_point_position(0, start_node.position)
-			curve.set_point_out(0, curve.get_point_out(0) + delta_start)
-			# Move end point and its in handle
-			curve.set_point_position(last_idx, end_node.position)
-			curve.set_point_in(last_idx, curve.get_point_in(last_idx) + delta_end)
+	# Rebuild the curve using the exact snapped node positions.
+	# This guarantees the mesh perfectly aligns with the nodes (Fixes A1/A2/A3).
+	if is_s_curve:
+		curve = _build_s_curve(start_node.position, _p_mid1, _p_mid2, end_node.position)
+	else:
+		curve = _build_c_curve(start_node.position, _p_mid1, end_node.position)
 	
 	var length := curve.get_baked_length()
 	var target_step := road_type.lane_width * 16.0
@@ -319,14 +310,11 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 				_create_segment_with_curve(prev_node, end_node, road_type, CurveMath.slice(curve, (i-1)*actual_step, length))
 			else:
 				var pos := curve.sample_baked(i * actual_step)
-				# force_new=true prevents snapping, ensuring the node perfectly matches the mesh end
 				var mid := RoadGraph.get_or_create(pos, true, true)
 				_create_segment_with_curve(prev_node, mid, road_type, CurveMath.slice(curve, (i-1)*actual_step, i*actual_step))
 				prev_node = mid
 				
 	cost_changed.emit(total_cost())
-	
-	# Clean up any zero-length segments created by snapping
 	_cleanup_degenerate_segments()
 
 func _update() -> void:
@@ -423,26 +411,21 @@ func _cancel() -> void:
 # ---------------------------------------------------------------- math
 
 func _build_c_curve(p0: Vector3, p1: Vector3, p2: Vector3) -> Curve3D:
-	# Creates a 3-point Catmull-Rom spline. By passing the mid-click (p1) as an 
-	# actual point on the curve (rather than just a control point), we increase 
-	# the degree of the curve. This distributes the curvature and prevents 
-	# sharp mesh inversion on tight turns.
+	# p0 = P (start), p1 = Q (mid-click), p2 = R (end)
 	var c := Curve3D.new()
 	
-	var d_p = (p1 - p0)
-	var d_q = (p2 - p0) * 0.5
-	var d_r = (p2 - p1)
+	# J falls on the PQ line. K falls on the QR line.
+	var t := 0.55228475
+	var j := p0.lerp(p1, t) 
+	var k := p2.lerp(p1, t)
 	
-	# Add P, Q, and R as points, setting their in/out handles for a smooth join.
-	c.add_point(p0, Vector3.ZERO, d_p * 0.5)
-	c.add_point(p1, -d_q * 0.5, d_q * 0.5)
-	c.add_point(p2, -d_r * 0.5, Vector3.ZERO)
+	# The curve starts at P, pulled towards J.
+	# The curve ends at R, pulled from K.
+	c.add_point(p0, Vector3.ZERO, j - p0)
+	c.add_point(p2, k - p2, Vector3.ZERO)
 	return c
 
 func _build_s_curve(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3) -> Curve3D:
-	# Cubic Bezier P0–C1–C2–P3:
-	#   out_handle(0) = C1 - P0
-	#   in_handle(1)  = C2 - P3
 	var c := Curve3D.new()
 	c.add_point(p0, Vector3.ZERO, p1 - p0)
 	c.add_point(p3, p2 - p3, Vector3.ZERO)

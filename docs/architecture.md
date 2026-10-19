@@ -223,8 +223,7 @@ TODO — purpose unclear from filename alone; fill in when touched.
 
 ### `CurveMath` — `scripts/core/curve_math.gd`
 
-- `slice(curve: Curve3D, start_dist: float, end_dist: float) -> Curve3D` — slices a curve using **De Casteljau's algorithm**. This creates exact cubic sub-curves, preserving perfect tangents and preventing mesh kinks.
-- `_de_casteljau(p0, p1, p2, p3, t)` — the core math for splitting a cubic Bezier into two perfectly smooth cubic Beziers.
+- `slice(curve: Curve3D, start_dist: float, end_dist: float) -> Curve3D` — Samples the parent curve's exact tangents at `start_dist` and `end_dist` and generates a mathematically perfect 2-point cubic Bézier. This guarantees the sliced sub-curve perfectly aligns with the parent curve's geometry, preventing mesh desync or visual kinks at waypoint boundaries.
 
 **Pitfall**: `Curve3D.add_point(pos)` with no handle args produces a **polyline** (0 handles = straight line to neighbors). For curves, pass handles: `add_point(pos, in_handle, out_handle)`. See `docs/pitfalls.md`.
 

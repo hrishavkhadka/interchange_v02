@@ -5,18 +5,19 @@ Append-only log of every phase commit. **Newest entries at the top.**
 ## 2026-10-19 — Phase 1/4 — Curve geometry and builder
 **Commit:** `<sha>` — `Phase 1/4 — Curve geometry and builder`
 **Files:** `scripts/build/road_builder.gd`, `scripts/core/road_node.gd`, `scripts/core/curve_math.gd`, `scripts/core/road_graph.gd`
-**Why:** The initial curve implementation created polylines instead of Beziers, lacked straight-preview updates, placed junctions at waypoints, and allowed broken mesh inversion on sharp curves.
+**Why:** The initial curve implementation created polyline approximations instead of Beziers, lacked straight-preview updates, placed junctions at waypoints, caused node-mesh desync on snapped curves, and allowed broken mesh inversion on sharp curves.
 **What:**
-- Fixed curve construction: C-curves now use quadratic control points to pass through the mid-click with correct tangents. S-curves use proper cubic control points.
+- Fixed curve construction: C-curves use quadratic control points with a 0.5522 factor for perfect circular arcs. S-curves use proper cubic handles.
 - Fixed `_update()` to render straight road previews (added missing `STRAIGHT_END` stage).
 - Added exact tangent checks in `RoadNode.is_pass_through()`, ensuring tight curves remain waypoints rather than junctions.
-- Upgraded `CurveMath.slice()` to use De Casteljau's algorithm for perfect cubic sub-curve splitting.
+- Upgraded `CurveMath.slice()` to guarantee perfect start/end tangents, eliminating the mesh/node desync that caused invisible remnants (A1/A2/A3).
 - Added minimum radius validation. If the curve turns tighter than `half_width + 1.5 * lane_width`, the preview turns red and placement is blocked.
 - Centralized placement validation to `_is_placement_valid()` to ensure red previews cannot be placed.
-- Reduced curve waypoint density to 16 lanes (~51m). Equalized spacing so there are no tiny "remnant" segments.
+- Reduced curve waypoint density to 16 lanes (~51m). Equalized spacing so there are no tiny remnant segments.
 - Enabled demolishing of tiny segments.
-**Tested:** C-curves, S-curves, straight roads. Snapping works relative to the previous point. Free-placed points no longer shift. Tight curves do not become junctions. Red previews block placement. Demolish cleans up completely.
-**Follow-ups:** Curve segment splitting when connecting new roads (T-junctions on curves).
+**Tested:** C-curves, S-curves, straight roads. Snapping works relative to the previous point. Free-placed points no longer shift. Tight curves do not become junctions. Red previews block placement. Demolish cleans up completely. Mesh perfectly aligns with waypoints.
+**Follow-ups:** Curve-aware hit detection (Phase 2), curve-preserving splitting (Phase 3), Move It tool (Phase 4).
+
 
 ## Entry format
 

@@ -88,3 +88,17 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 **Detected in:** Phase 1/4
 **Files:** `scripts/build/road_builder.gd`
 **Status:** fixed
+
+## CurveMath — Slicing causes mesh folds and invisible remnants
+**Cause:** The previous De Casteljau slice used an approximate binary search for arc length, causing sub-curves to be physically misaligned with their parent nodes. This caused nodes to appear in the middle of meshes, the inner mesh to fold (nipple), and invisible 0-length segments to be created.
+**Fix:** Rewrote `slice()` to sample exact start/end tangents and generate a mathematically perfect 2-point cubic Bezier for the slice.
+**Detected in:** Phase 1/4
+**Files:** `scripts/core/curve_math.gd`
+**Status:** fixed
+
+## RoadBuilder — Curve spiked ("nipple") when snapped
+**Cause:** A handle realignment hack was stretching handles after the curve was built, causing the curve to fold over itself.
+**Fix:** `_commit_curve_data` now rebuilds the curve from scratch using the snapped node positions, ensuring handles are calculated from the final anchored points.
+**Detected in:** Phase 1/4
+**Files:** `scripts/build/road_builder.gd`
+**Status:** fixed
