@@ -422,9 +422,11 @@ func _cancel() -> void:
 # ---------------------------------------------------------------- math
 
 func _build_c_curve(p0: Vector3, p1: Vector3, p2: Vector3) -> Curve3D:
-	# p1 is the desired point the curve must pass through at t=0.5 (the mid-click).
-	# Calculate the quadratic control point C so that the curve hits p1 at t=0.5.
-	var c := 2.0 * p1 - 0.5 * (p0 + p2)
+	# p1 is the control point (mid-click). Using it directly ensures the
+	# curve starts tangent to p0->p1 and ends tangent to p1->p2.
+	# The curve will naturally pass through the midpoint between p1 and
+	# the chord p0-p2, which matches the desired CS2 behavior.
+	var c := p1
 	
 	# Convert quadratic (P0, C, P2) to cubic (P0, out_handle(0), in_handle(2), P2)
 	var out_h := (c - p0) * 2.0 / 3.0
