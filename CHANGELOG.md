@@ -18,6 +18,18 @@ Append-only log of every phase commit. **Newest entries at the top.**
 **Tested:** C-curves, S-curves, straight roads. Snapping works relative to the previous point. Free-placed points no longer shift. Tight curves do not become junctions. Red previews block placement. Demolish cleans up completely. Mesh perfectly aligns with waypoints.
 **Follow-ups:** Curve-aware hit detection (Phase 2), curve-preserving splitting (Phase 3), Move It tool (Phase 4).
 
+## 2026-10-19 — Phase 2 & 3/4 — Curve hit detection and preserving split
+**Commit:** `<sha>` — `Phase 2 & 3/4 — Curve hit detection and preserving split`
+**Files:** `scripts/core/road_ops.gd`, `scripts/build/road_builder.gd`, `scripts/build/snap_resolver.gd`
+**Why:** Hitboxes used straight chords, allowing roads to be built over curves. Splitting a curve at a T-junction converted it back to straight lines. Absorbing waypoints near curves flattened them.
+**What:**
+- Implemented `_get_closest_point_on_curve()` in `RoadOps`. Snapping, hovering, and demolishing now project onto the actual `Curve3D`.
+- `is_placement_valid` now samples curves into 5m segments to accurately detect collisions against curved geometry.
+- `_split_existing_segment` now calculates the exact bake distance, and uses `CurveMath.slice` to create two perfect curved sub-segments.
+- Fixed `_absorb_waypoint` curve detection. It now checks handle lengths instead of `point_count` (since our curves are 2-point cubics).
+- Absorbing a waypoint on a curve now builds a 3-point spline (`other_a → w → other_b`) preserving the original tangents. The splitter then slices this smoothly.
+**Tested:** Snapping and building over curves. T-junctions on curves remain curved. Absorbing waypoints near curves preserves the curve and moves the junction smoothly.
+**Follow-ups:** S-curve preview degeneracy (Phase 4), Move It tool (Phase 4).
 
 ## Entry format
 

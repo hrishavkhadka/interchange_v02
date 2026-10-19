@@ -35,7 +35,7 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 
 **Detected in:** Phase 1/4 diagnosis
 **Files:** `scripts/core/road_ops.gd`
-**Status:** open (Phase 2/4)
+**Status:** fixed
 
 ---
 
@@ -47,7 +47,7 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 
 **Detected in:** Phase 1/4 diagnosis
 **Files:** `scripts/build/road_builder.gd` — `_split_existing_segment`
-**Status:** open (Phase 3/4)
+**Status:** fixed
 
 ---
 
@@ -100,5 +100,12 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 **Cause:** A handle realignment hack was stretching handles after the curve was built, causing the curve to fold over itself.
 **Fix:** `_commit_curve_data` now rebuilds the curve from scratch using the snapped node positions, ensuring handles are calculated from the final anchored points.
 **Detected in:** Phase 1/4
+**Files:** `scripts/build/road_builder.gd`
+**Status:** fixed
+
+## RoadBuilder — Waypoint absorption fails on 2-point cubic curves
+**Cause:** `_absorb_waypoint` checked `point_count > 2` to detect curves. Our curves are 2-point cubics (2 points + handles), so the check always failed. The absorption fell through to straight-line creation, flattening the curve.
+**Fix:** `_segment_has_curve()` now checks handle lengths instead of point count. `_absorb_waypoint` extracts the exact handles and builds a 3-point spline through the absorbed waypoint, preserving tangents before splitting.
+**Detected in:** Phase 3/4
 **Files:** `scripts/build/road_builder.gd`
 **Status:** fixed

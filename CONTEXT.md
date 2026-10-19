@@ -73,9 +73,9 @@ Levels are saved as JSON in `user://levels/`:
   - Save/load (F9/F10 quick save + named saves via buttons).
   - Curved road drawing (C-curves and S-curves) via multi-click placement + road shape sub-menu on the Road tool.
 - **In progress — curve roads (Phase 1/4 → 4/4)**:
-  - [x] **Phase 1/4 — Curve geometry & builder.** Real Bézier handles, curve passes through mid-click, correct click sequence, finer waypoint spacing, straight preview fixed, pass-through tangents fixed, minimum radius check added, validation centralized, mesh/node desync fixed, remnant cleanup fixed.
-  - [ ] **Phase 2/4 — Curve-aware hit detection.** `RoadOps` projection: chord → `Curve3D`.
-  - [ ] **Phase 3/4 — Curve-preserving split.** `_split_existing_segment` uses `CurveMath.slice`.
+  - [x] **Phase 1/4 — Curve geometry & builder.** Real Bézier handles, curve passes through mid-click, correct click sequence, straight preview fixed, minimum radius check added, validation centralized, mesh/node desync fixed.
+  - [x] **Phase 2/4 — Curve-aware hit detection.** `RoadOps` now projects onto the actual `Curve3D` for snapping and collision.
+  - [x] **Phase 3/4 — Curve-preserving split.** `_split_existing_segment` uses `CurveMath.slice` to preserve curve geometry during T-junctions. Absorbing waypoints preserves tangents.
   - [ ] **Phase 4/4 — S-curve preview & Move It.** Fix `SCURVE_MID2` degenerate preview. Add node/handle dragging.
 - **Known pending issues**: see `docs/pitfalls.md` (`Status: open` entries).
 

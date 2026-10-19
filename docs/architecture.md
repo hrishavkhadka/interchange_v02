@@ -234,12 +234,11 @@ TODO — purpose unclear from filename alone; fill in when touched.
 
 ### `RoadOps` — `scripts/core/road_ops.gd`
 
-- `find_crossings(start, end) -> Array` — placement-time overlap check
-- `find_segment_under_point(pos) -> Variant` — cursor hit test
-- `find_nearest_segment(pos, radius) -> Variant`
-- `find_lane_under_point(pos) -> Variant`
-- `is_placement_valid(...) -> bool`
-- 2D-segment math helpers
+- `find_segment_under_point(pos) -> Variant` — cursor hit test. Projects to `Curve3D` via `_get_closest_point_on_curve`.
+- `find_nearest_segment(pos, radius) -> Variant` — projects to `Curve3D`.
+- `is_placement_valid(...) -> bool` — samples curve segments every 5m for collision checks against the new road.
+
+**Curve-aware projection**: `_get_closest_point_on_curve()` does a two-pass search (16 coarse samples + binary refinement) to find the exact bake distance and point on a `Curve3D`.
 
 **Known limitation**: `find_segment_under_point`, `find_nearest_segment`, `find_crossings` project to the **chord** between segment endpoints. Correct for straight segments; wrong for curved segments. Phase 2/4 fixes. `find_lane_under_point` is already curve-aware via `_project_to_curve_xz`.
 
