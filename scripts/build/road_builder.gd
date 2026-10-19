@@ -173,7 +173,7 @@ func _click_end_straight() -> void:
 	var hit_raw: Variant = _ground_hit()
 	if hit_raw == null: return
 	var hit: Vector3 = hit_raw
-	var r := SnapResolver.resolve_position(hit, settings, road_type)
+	var r := _resolve_end(hit, _p_start, _start_t_segment, _start_guide_dir)
 	_p_end = r["point"]
 	_end_t_segment = r["t_segment"]
 	
@@ -217,7 +217,7 @@ func _click_curve_mid() -> void:
 	var hit_raw: Variant = _ground_hit()
 	if hit_raw == null: return
 	var hit: Vector3 = hit_raw
-	var r := SnapResolver.resolve_position(hit, settings, road_type)
+	var r := _resolve_end(hit, _p_start, _start_t_segment, _start_guide_dir)
 	_p_mid1 = r["point"]
 	
 	if _p_start.distance_to(_p_mid1) < road_type.lane_width: return
@@ -227,7 +227,7 @@ func _click_curve_end() -> void:
 	var hit_raw: Variant = _ground_hit()
 	if hit_raw == null: return
 	var hit: Vector3 = hit_raw
-	var r := SnapResolver.resolve_position(hit, settings, road_type)
+	var r := _resolve_end(hit, _p_mid1, null, null)
 	_p_end = r["point"]
 	_end_t_segment = r["t_segment"]
 	
@@ -248,21 +248,23 @@ func _click_scurve_mid1() -> void:
 	var hit_raw: Variant = _ground_hit()
 	if hit_raw == null: return
 	var hit: Vector3 = hit_raw
-	_p_mid1 = hit
+	var r := _resolve_end(hit, _p_start, _start_t_segment, _start_guide_dir)
+	_p_mid1 = r["point"]
 	_stage = BuildStage.SCURVE_MID2
 
 func _click_scurve_mid2() -> void:
 	var hit_raw: Variant = _ground_hit()
 	if hit_raw == null: return
 	var hit: Vector3 = hit_raw
-	_p_mid2 = hit
+	var r := _resolve_end(hit, _p_mid1, null, null)
+	_p_mid2 = r["point"]
 	_stage = BuildStage.SCURVE_END
 
 func _commit_scurve_preview() -> void:
 	var hit_raw: Variant = _ground_hit()
 	if hit_raw == null: return
 	var hit: Vector3 = hit_raw
-	var r := SnapResolver.resolve_position(hit, settings, road_type)
+	var r := _resolve_end(hit, _p_mid2, null, null)
 	_p_end = r["point"]
 	_end_t_segment = r["t_segment"]
 	
@@ -304,8 +306,8 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 	if start_node == end_node: return
 	
 	var length := curve.get_baked_length()
-	# For curves, use a smaller step so they split into more segments (~4 lanes = 12.8m).
-	var step := road_type.lane_width * 4.0
+	# For curves, step is 12 lanes (~38.4m), which is 1/3 the density of the previous step.
+	var step := road_type.lane_width * 12.0
 	var count := maxi(1, int(ceil(length / step)))
 	
 	if count == 1:
@@ -330,7 +332,7 @@ func _update() -> void:
 	_guidelines.update(hit, road_type)
 	
 	if _stage == BuildStage.STRAIGHT_END:
-		var final := _resolve_end(hit)
+		var final := _resolve_end(hit, _p_start, _start_t_segment, _start_guide_dir)
 		var preview_end: Vector3 = final["point"]
 		if _p_start.distance_to(preview_end) < road_type.lane_width:
 			_preview.visible = false
@@ -342,7 +344,7 @@ func _update() -> void:
 		_snap_indicator.show_at(preview_end)
 		
 	elif _stage == BuildStage.CURVE_MID:
-		var final := _resolve_end(hit)
+		var final := _resolve_end(hit, _p_start, _start_t_segment, _start_guide_dir)
 		var preview_mid: Vector3 = final["point"]
 		if _p_start.distance_to(preview_mid) < road_type.lane_width:
 			_preview.visible = false
@@ -354,7 +356,7 @@ func _update() -> void:
 		_snap_indicator.show_at(preview_mid)
 		
 	elif _stage == BuildStage.CURVE_END:
-		var final := _resolve_end(hit)
+		var final := _resolve_end(hit, _p_mid1, null, null)
 		var preview_end: Vector3 = final["point"]
 		if _p_start.distance_to(preview_end) < road_type.lane_width:
 			_preview.visible = false
@@ -366,7 +368,7 @@ func _update() -> void:
 		_snap_indicator.show_at(preview_end)
 		
 	elif _stage == BuildStage.SCURVE_MID1:
-		var final := _resolve_end(hit)
+		var final := _resolve_end(hit, _p_start, _start_t_segment, _start_guide_dir)
 		var preview_end: Vector3 = final["point"]
 		if _p_start.distance_to(preview_end) < road_type.lane_width:
 			_preview.visible = false
@@ -378,7 +380,8 @@ func _update() -> void:
 		_snap_indicator.show_at(preview_end)
 
 	elif _stage == BuildStage.SCURVE_MID2:
-		_p_mid2 = hit
+		var final := _resolve_end(hit, _p_mid1, null, null)
+		_p_mid2 = final["point"]
 		var curve := _build_s_curve(_p_start, _p_mid1, _p_mid2, _p_mid2)
 		_preview.visible = true
 		_preview.setup(road_type, curve)
@@ -386,7 +389,7 @@ func _update() -> void:
 		_snap_indicator.show_at(_p_mid2)
 
 	elif _stage == BuildStage.SCURVE_END:
-		var final := _resolve_end(hit)
+		var final := _resolve_end(hit, _p_mid2, null, null)
 		var preview_end: Vector3 = final["point"]
 		if _p_start.distance_to(preview_end) < road_type.lane_width:
 			_preview.visible = false
@@ -556,28 +559,18 @@ func _cleanup_node(node: RoadNode) -> bool:
 	RoadGraph.nodes.erase(node)
 	return true
 
-func _resolve_end(raw: Vector3) -> Dictionary:
+func _resolve_end(raw: Vector3, origin: Vector3, origin_t_seg: Variant, origin_guide: Variant = null) -> Dictionary:
 	var pos_r := SnapResolver.resolve_position(raw, settings, road_type)
 	var kind: String = pos_r["kind"]
 	var pos: Vector3 = pos_r["point"]
 	var t_seg: Variant = pos_r["t_segment"]
 	var dir_kind: String = ""
 	if kind == "free":
-		var dir_r := SnapResolver.resolve_direction(_p_start, pos, _start_t_segment, _start_guide_dir, settings)
+		var dir_r := SnapResolver.resolve_direction(origin, pos, origin_t_seg, origin_guide, settings)
 		pos = dir_r["point"]
 		dir_kind = dir_r["kind"]
-		if settings.snap_length and road_type != null:
-			var v: Vector3 = pos - _p_start
-			v.y = 0.0
-			var L: float = v.length()
-			if L > 0.01:
-				var lw: float = road_type.lane_width
-				var qL: float = roundf(L / lw) * lw
-				if qL < lw: qL = lw
-				var nd: Vector3 = v.normalized()
-				pos = _p_start + nd * qL
 	return { "point": pos, "kind": kind, "t_segment": t_seg, "direction_kind": dir_kind }
-
+	
 func _would_sharp_bend(start: Vector3, end: Vector3, start_t_segment: Variant, end_t_segment: Variant) -> bool:
 	var new_dir: Vector3 = end - start
 	new_dir.y = 0.0
