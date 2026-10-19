@@ -306,8 +306,8 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 	if start_node == end_node: return
 	
 	var length := curve.get_baked_length()
-	# For curves, step is 12 lanes (~38.4m), which is 1/3 the density of the previous step.
-	var step := road_type.lane_width * 12.0
+	# Match straight road waypoint spacing (~96m) to reduce waypoint density.
+	var step := road_type.lane_width * WAYPOINT_SPACING_LANES
 	var count := maxi(1, int(ceil(length / step)))
 	
 	if count == 1:
