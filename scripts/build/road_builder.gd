@@ -306,11 +306,8 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 	if start_node == end_node: return
 	
 	var length := curve.get_baked_length()
-	# 1/4 of the original density (4.0 * 4.0 = 16.0 lanes)
 	var target_step := road_type.lane_width * 16.0
 	var count := maxi(1, int(round(length / target_step)))
-	
-	# Evenly divide the length so there are no leftover "tiny" segments at the end
 	var actual_step := length / float(count)
 	
 	if count == 1:
@@ -322,7 +319,8 @@ func _commit_curve_data(curve: Curve3D, end_pos: Vector3, t_targets: Array, shar
 				_create_segment_with_curve(prev_node, end_node, road_type, CurveMath.slice(curve, (i-1)*actual_step, length))
 			else:
 				var pos := curve.sample_baked(i * actual_step)
-				var mid := RoadGraph.get_or_create_waypoint(pos)
+				# force_new=true prevents snapping, ensuring the node perfectly matches the mesh end
+				var mid := RoadGraph.get_or_create(pos, true, true)
 				_create_segment_with_curve(prev_node, mid, road_type, CurveMath.slice(curve, (i-1)*actual_step, i*actual_step))
 				prev_node = mid
 				
@@ -535,8 +533,8 @@ func _find_segment_under_cursor() -> RoadSegment:
 		if not is_instance_valid(s): continue
 		if s.curve == null or s.road_type == null: continue
 		var length: float = s.curve.get_baked_length()
-		if length < 0.1: continue
-		var samples: int = maxi(8, int(length * 0.5))
+		# Removed the length < 0.1 check so tiny segments can be selected
+		var samples: int = maxi(2, int(length * 0.5))
 		for i in range(samples + 1):
 			var t: float = float(i) / float(samples)
 			var p: Vector3 = s.curve.sample_baked(t * length)

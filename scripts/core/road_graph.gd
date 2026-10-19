@@ -28,10 +28,11 @@ func find_nearest(pos: Vector3, radius: float = SNAP_RADIUS) -> RoadNode:
 			best = n
 	return best
 
-func get_or_create(pos: Vector3, is_waypoint: bool = false) -> RoadNode:
-	var existing := find_nearest(pos)
-	if existing != null:
-		return existing
+func get_or_create(pos: Vector3, is_waypoint: bool = false, force_new: bool = false) -> RoadNode:
+	if not force_new:
+		var existing := find_nearest(pos)
+		if existing != null:
+			return existing
 	var node := RoadNode.new(pos, _next_id)
 	node.is_waypoint = is_waypoint
 	_next_id += 1
