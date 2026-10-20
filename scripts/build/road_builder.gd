@@ -1100,8 +1100,6 @@ func _move_drag_update() -> void:
 			var s = entry["segment"]
 			var is_start = entry["is_start"]
 			var last = s.curve.point_count - 1
-			# Moving the node translates the handles automatically in Godot.
-			# Do not add delta to the handle vectors, or they will stretch.
 			if is_start:
 				s.curve.set_point_position(0, new_pos)
 			else:
@@ -1151,6 +1149,8 @@ func _move_drag_update() -> void:
 		var p0 = s.start_node.position
 		var p3 = s.end_node.position
 		var chord = p3 - p0
+		var chord_len = chord.length()
+		if chord_len < 0.1: return
 		var chord_dir = chord.normalized()
 		var perp = Vector3(-chord_dir.z, 0, chord_dir.x)
 		
@@ -1164,10 +1164,19 @@ func _move_drag_update() -> void:
 		var h_offset = perp * delta_offset * 1.5
 		
 		var last = s.curve.point_count - 1
-		# Adding h_offset to BOTH handles creates a U-shape (bow).
-		# Subtracting it from one would create an S-shape.
-		s.curve.set_point_out(0, start_handles["out"] + h_offset)
-		s.curve.set_point_in(last, start_handles["in"] + h_offset)
+		var new_out = start_handles["out"] + h_offset
+		var new_in = start_handles["in"] + h_offset
+		
+		# Clamp handle magnitude to chord_len / 3.0 to mathematically
+		# guarantee the curve can never self-intersect or form a loop.
+		var max_h = chord_len / 3.0
+		if new_out.length() > max_h:
+			new_out = new_out.normalized() * max_h
+		if new_in.length() > max_h:
+			new_in = new_in.normalized() * max_h
+			
+		s.curve.set_point_out(0, new_out)
+		s.curve.set_point_in(last, new_in)
 		s.rebuild_mesh()
 		_update_move_gizmos()
 
