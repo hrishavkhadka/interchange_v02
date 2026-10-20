@@ -985,11 +985,10 @@ func _move_click_pressed() -> void:
 			
 			var handle_vec = seg.curve.get_point_out(0) if is_start else seg.curve.get_point_in(last)
 			if handle_vec.length_squared() < 0.01:
-				handle_vec = (other_node.position - _move_selected_node.position).normalized() * 2.0
-				if not is_start: handle_vec = -handle_vec
+				handle_vec = (other_node.position - _move_selected_node.position) / 3.0
 				
 			var handle_pos = _move_selected_node.position + handle_vec
-			if hit.distance_to(handle_pos) < 2.0:
+			if hit.distance_to(handle_pos) < 2.5:
 				_start_move_drag("handle", seg, is_start, hit)
 				return
 	elif _move_selected_segment != null:
@@ -999,30 +998,31 @@ func _move_click_pressed() -> void:
 		var p3 = seg.end_node.position
 		var h_out = seg.curve.get_point_out(0)
 		var h_in = seg.curve.get_point_in(last)
-		if h_out.length_squared() < 0.01: h_out = (p3 - p0).normalized() * 2.0
-		if h_in.length_squared() < 0.01: h_in = (p0 - p3).normalized() * 2.0
 		
-		if hit.distance_to(p0 + h_out) < 2.0:
+		if h_out.length_squared() < 0.01: h_out = (p3 - p0) / 3.0
+		if h_in.length_squared() < 0.01: h_in = (p0 - p3) / 3.0
+		
+		if hit.distance_to(p0 + h_out) < 2.5:
 			_start_move_drag("handle", seg, true, hit)
 			return
-		if hit.distance_to(p3 + h_in) < 2.0:
+		if hit.distance_to(p3 + h_in) < 2.5:
 			_start_move_drag("handle", seg, false, hit)
 			return
 
 	# 2. Check if clicking selected node or segment to drag
-	if _move_selected_node != null and hit.distance_to(_move_selected_node.position) < 2.0:
+	if _move_selected_node != null and hit.distance_to(_move_selected_node.position) < 2.5:
 		_start_move_drag("node", null, false, hit)
 		return
 		
 	if _move_selected_segment != null:
 		# Prioritize selecting the adjacent nodes of the selected segment
-		if hit.distance_to(_move_selected_segment.start_node.position) < 2.0:
+		if hit.distance_to(_move_selected_segment.start_node.position) < 2.5:
 			_move_selected_node = _move_selected_segment.start_node
 			_move_selected_segment = null
 			_update_move_gizmos()
 			_start_move_drag("node", null, false, hit)
 			return
-		if hit.distance_to(_move_selected_segment.end_node.position) < 2.0:
+		if hit.distance_to(_move_selected_segment.end_node.position) < 2.5:
 			_move_selected_node = _move_selected_segment.end_node
 			_move_selected_segment = null
 			_update_move_gizmos()
@@ -1030,7 +1030,7 @@ func _move_click_pressed() -> void:
 			return
 			
 		var res = RoadOps._get_closest_point_on_curve(hit, _move_selected_segment.curve, _move_selected_segment.curve.get_baked_length())
-		if res["dist"] < 2.0:
+		if res["dist"] < 2.5:
 			_start_move_drag("segment", _move_selected_segment, false, hit)
 			return
 
@@ -1249,11 +1249,10 @@ func _update_move_gizmos() -> void:
 			
 			var handle_vec = seg.curve.get_point_out(0) if is_start else seg.curve.get_point_in(last)
 			if handle_vec.length_squared() < 0.01:
-				handle_vec = (other_node.position - _move_selected_node.position).normalized() * 2.0
-				if not is_start: handle_vec = -handle_vec
+				handle_vec = (other_node.position - _move_selected_node.position) / 3.0
 					
 			var handle_pos = _move_selected_node.position + handle_vec
-			_add_gizmo(handle_pos, Color.CYAN, 0.5)
+			_add_gizmo(handle_pos, Color.CYAN, 0.7)
 			_add_line_gizmo(_move_selected_node.position, handle_pos, Color.CYAN)
 				
 	elif _move_selected_segment != null:
@@ -1265,13 +1264,14 @@ func _update_move_gizmos() -> void:
 		
 		var h_out = _move_selected_segment.curve.get_point_out(0)
 		var h_in = _move_selected_segment.curve.get_point_in(last)
-		if h_out.length_squared() < 0.01: h_out = (p3 - p0).normalized() * 2.0
-		if h_in.length_squared() < 0.01: h_in = (p0 - p3).normalized() * 2.0
+		
+		if h_out.length_squared() < 0.01: h_out = (p3 - p0) / 3.0
+		if h_in.length_squared() < 0.01: h_in = (p0 - p3) / 3.0
 			
 		var h_pos_out = p0 + h_out
 		var h_pos_in = p3 + h_in
-		_add_gizmo(h_pos_out, Color.CYAN, 0.5)
-		_add_gizmo(h_pos_in, Color.CYAN, 0.5)
+		_add_gizmo(h_pos_out, Color.CYAN, 0.7)
+		_add_gizmo(h_pos_in, Color.CYAN, 0.7)
 		_add_line_gizmo(p0, h_pos_out, Color.CYAN)
 		_add_line_gizmo(p3, h_pos_in, Color.CYAN)
 
@@ -1302,8 +1302,8 @@ func _add_line_gizmo(from: Vector3, to: Vector3, color: Color) -> void:
 	
 	var mesh_inst = MeshInstance3D.new()
 	var cyl = CylinderMesh.new()
-	cyl.top_radius = 0.05
-	cyl.bottom_radius = 0.05
+	cyl.top_radius = 0.1
+	cyl.bottom_radius = 0.1
 	cyl.height = 1.0
 	mesh_inst.mesh = cyl
 	
