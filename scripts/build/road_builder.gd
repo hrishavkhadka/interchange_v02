@@ -981,19 +981,31 @@ func _move_click_pressed() -> void:
 			var seg = entry["segment"]
 			var is_start = entry["is_start"]
 			var last = seg.curve.point_count - 1
-			var handle_pos = Vector3.ZERO
-			if is_start: handle_pos = _move_selected_node.position + seg.curve.get_point_out(0)
-			else: handle_pos = _move_selected_node.position + seg.curve.get_point_in(last)
+			var other_node = seg.end_node if is_start else seg.start_node
+			
+			var handle_vec = seg.curve.get_point_out(0) if is_start else seg.curve.get_point_in(last)
+			if handle_vec.length_squared() < 0.01:
+				handle_vec = (other_node.position - _move_selected_node.position).normalized() * 2.0
+				if not is_start: handle_vec = -handle_vec
+				
+			var handle_pos = _move_selected_node.position + handle_vec
 			if hit.distance_to(handle_pos) < 2.0:
 				_start_move_drag("handle", seg, is_start, hit)
 				return
 	elif _move_selected_segment != null:
 		var seg = _move_selected_segment
 		var last = seg.curve.point_count - 1
-		if hit.distance_to(seg.start_node.position + seg.curve.get_point_out(0)) < 2.0:
+		var p0 = seg.start_node.position
+		var p3 = seg.end_node.position
+		var h_out = seg.curve.get_point_out(0)
+		var h_in = seg.curve.get_point_in(last)
+		if h_out.length_squared() < 0.01: h_out = (p3 - p0).normalized() * 2.0
+		if h_in.length_squared() < 0.01: h_in = (p0 - p3).normalized() * 2.0
+		
+		if hit.distance_to(p0 + h_out) < 2.0:
 			_start_move_drag("handle", seg, true, hit)
 			return
-		if hit.distance_to(seg.end_node.position + seg.curve.get_point_in(last)) < 2.0:
+		if hit.distance_to(p3 + h_in) < 2.0:
 			_start_move_drag("handle", seg, false, hit)
 			return
 
@@ -1001,7 +1013,22 @@ func _move_click_pressed() -> void:
 	if _move_selected_node != null and hit.distance_to(_move_selected_node.position) < 2.0:
 		_start_move_drag("node", null, false, hit)
 		return
+		
 	if _move_selected_segment != null:
+		# Prioritize selecting the adjacent nodes of the selected segment
+		if hit.distance_to(_move_selected_segment.start_node.position) < 2.0:
+			_move_selected_node = _move_selected_segment.start_node
+			_move_selected_segment = null
+			_update_move_gizmos()
+			_start_move_drag("node", null, false, hit)
+			return
+		if hit.distance_to(_move_selected_segment.end_node.position) < 2.0:
+			_move_selected_node = _move_selected_segment.end_node
+			_move_selected_segment = null
+			_update_move_gizmos()
+			_start_move_drag("node", null, false, hit)
+			return
+			
 		var res = RoadOps._get_closest_point_on_curve(hit, _move_selected_segment.curve, _move_selected_segment.curve.get_baked_length())
 		if res["dist"] < 2.0:
 			_start_move_drag("segment", _move_selected_segment, false, hit)
@@ -1073,17 +1100,14 @@ func _move_drag_update() -> void:
 			var s = entry["segment"]
 			var is_start = entry["is_start"]
 			var last = s.curve.point_count - 1
+			# Moving the node translates the handles automatically in Godot.
+			# Do not add delta to the handle vectors, or they will stretch.
 			if is_start:
 				s.curve.set_point_position(0, new_pos)
-				var out = s.curve.get_point_out(0)
-				if out.length_squared() > 0.01:
-					s.curve.set_point_out(0, out + delta)
 			else:
 				s.curve.set_point_position(last, new_pos)
-				var in_h = s.curve.get_point_in(last)
-				if in_h.length_squared() > 0.01:
-					s.curve.set_point_in(last, in_h + delta)
 			s.rebuild_mesh()
+		_update_move_gizmos()
 			
 	elif _move_drag_target == "handle":
 		var node_pos = _move_drag_segment.start_node.position if _move_drag_node_side else _move_drag_segment.end_node.position
@@ -1120,6 +1144,7 @@ func _move_drag_update() -> void:
 				else:
 					other_seg.curve.set_point_out(0, o_dir * o_len)
 				other_seg.rebuild_mesh()
+		_update_move_gizmos()
 				
 	elif _move_drag_target == "segment":
 		var s = _move_drag_segment
@@ -1139,9 +1164,12 @@ func _move_drag_update() -> void:
 		var h_offset = perp * delta_offset * 1.5
 		
 		var last = s.curve.point_count - 1
+		# Adding h_offset to BOTH handles creates a U-shape (bow).
+		# Subtracting it from one would create an S-shape.
 		s.curve.set_point_out(0, start_handles["out"] + h_offset)
 		s.curve.set_point_in(last, start_handles["in"] + h_offset)
 		s.rebuild_mesh()
+		_update_move_gizmos()
 
 func _move_click_released() -> void:
 	if not _move_is_dragging: return
@@ -1222,26 +1250,30 @@ func _update_move_gizmos() -> void:
 			var handle_vec = seg.curve.get_point_out(0) if is_start else seg.curve.get_point_in(last)
 			if handle_vec.length_squared() < 0.01:
 				handle_vec = (other_node.position - _move_selected_node.position).normalized() * 2.0
-				if not is_start:
-					handle_vec = -handle_vec
+				if not is_start: handle_vec = -handle_vec
 					
-			var pos = _move_selected_node.position + handle_vec
-			_add_gizmo(pos, Color.CYAN, 0.5)
+			var handle_pos = _move_selected_node.position + handle_vec
+			_add_gizmo(handle_pos, Color.CYAN, 0.5)
+			_add_line_gizmo(_move_selected_node.position, handle_pos, Color.CYAN)
 				
 	elif _move_selected_segment != null:
 		var last = _move_selected_segment.curve.point_count - 1
-		_add_gizmo(_move_selected_segment.start_node.position, Color.GREEN, 1.0)
-		_add_gizmo(_move_selected_segment.end_node.position, Color.GREEN, 1.0)
+		var p0 = _move_selected_segment.start_node.position
+		var p3 = _move_selected_segment.end_node.position
+		_add_gizmo(p0, Color.GREEN, 1.0)
+		_add_gizmo(p3, Color.GREEN, 1.0)
 		
 		var h_out = _move_selected_segment.curve.get_point_out(0)
 		var h_in = _move_selected_segment.curve.get_point_in(last)
-		if h_out.length_squared() < 0.01:
-			h_out = (_move_selected_segment.end_node.position - _move_selected_segment.start_node.position).normalized() * 2.0
-		if h_in.length_squared() < 0.01:
-			h_in = (_move_selected_segment.start_node.position - _move_selected_segment.end_node.position).normalized() * 2.0
+		if h_out.length_squared() < 0.01: h_out = (p3 - p0).normalized() * 2.0
+		if h_in.length_squared() < 0.01: h_in = (p0 - p3).normalized() * 2.0
 			
-		_add_gizmo(_move_selected_segment.start_node.position + h_out, Color.CYAN, 0.5)
-		_add_gizmo(_move_selected_segment.end_node.position + h_in, Color.CYAN, 0.5)
+		var h_pos_out = p0 + h_out
+		var h_pos_in = p3 + h_in
+		_add_gizmo(h_pos_out, Color.CYAN, 0.5)
+		_add_gizmo(h_pos_in, Color.CYAN, 0.5)
+		_add_line_gizmo(p0, h_pos_out, Color.CYAN)
+		_add_line_gizmo(p3, h_pos_in, Color.CYAN)
 
 func _add_gizmo(pos: Vector3, color: Color, radius: float) -> void:
 	var mesh = MeshInstance3D.new()
@@ -1262,3 +1294,29 @@ func _clear_move_gizmos() -> void:
 	for g in _move_gizmos:
 		g.queue_free()
 	_move_gizmos.clear()
+
+func _add_line_gizmo(from: Vector3, to: Vector3, color: Color) -> void:
+	var dir = to - from
+	var dist = dir.length()
+	if dist < 0.1: return
+	
+	var mesh_inst = MeshInstance3D.new()
+	var cyl = CylinderMesh.new()
+	cyl.top_radius = 0.05
+	cyl.bottom_radius = 0.05
+	cyl.height = 1.0
+	mesh_inst.mesh = cyl
+	
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.no_depth_test = true
+	mesh_inst.material_override = mat
+	
+	mesh_inst.position = (from + to) * 0.5 + Vector3(0, 0.1, 0)
+	mesh_inst.scale = Vector3(1, dist, 1)
+	mesh_inst.transform.basis = Basis.looking_at(dir.normalized(), Vector3.UP)
+	mesh_inst.rotate_object_local(Vector3.RIGHT, PI / 2.0)
+	
+	add_child(mesh_inst)
+	_move_gizmos.append(mesh_inst)
