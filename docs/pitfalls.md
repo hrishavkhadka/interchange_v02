@@ -144,3 +144,10 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 **Detected in:** Phase 4/4
 **Files:** `scripts/build/road_builder.gd`
 **Status:** fixed
+
+## LaneGraph — Junction trimming uses chord instead of tangent
+**Cause:** `_outward_dir` calculated angles using the straight chord between endpoints. For curved segments, the chord direction differs from the actual road heading at the junction, causing incorrect lane trims and gaps.
+**Fix:** `_outward_dir` now samples the `Curve3D` near the node to get the exact tangent direction. Falls back to the chord only if the curve is too short.
+**Detected in:** Phase 5
+**Files:** `scripts/sim/lane_graph.gd`
+**Status:** fixed

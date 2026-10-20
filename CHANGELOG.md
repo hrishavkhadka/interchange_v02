@@ -3,6 +3,17 @@
 Append-only log of every phase commit. **Newest entries at the top.**
 
 
+## 2026-10-19 — Phase 5 — Curve-aware Lane Generation & Simulation
+**Commit:** `<sha>` — `Phase 5 — Curve-aware Lane Generation & Simulation`
+**Files:** `scripts/sim/lane_graph.gd`, `context.md`, `CHANGELOG.md`, `docs/pitfalls.md`
+**Why:** Lane generation for curved roads was broken at junctions because `_outward_dir` used the straight chord to calculate angles instead of the actual curve tangents. This caused incorrect lane trimming at junctions with curves.
+**What:**
+- Updated `LaneGraph._outward_dir` to sample the `Curve3D` tangent at the junction node rather than the straight chord.
+- Confirmed that the minimum radius check in `RoadBuilder` prevents inner lanes from self-intersecting during offset generation.
+- Verified that vehicle kinematics (`sample_baked`) correctly traverse the generated lane polylines.
+**Tested:** Vehicles pathfind, drive, and turn at junctions connecting curved and straight roads. Lane trimming correctly matches the visual curves.
+**Follow-ups:** Phase 6 (Elevation).
+
 ## 2026-10-19 — Phase 4/4 — Move It Tool & Save/Load Fix
 **Commit:** `<sha>` — `Phase 4/4 — Move It Tool & Save/Load Fix`
 **Files:** `scripts/build/road_builder.gd`, `scripts/ui/main_toolbar.gd`, `scripts/core/road_ops.gd`, `scripts/game/level_io.gd`, `context.md`, `CHANGELOG.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/pitfalls.md`

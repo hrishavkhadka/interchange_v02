@@ -54,10 +54,6 @@ func _compute_node_trims() -> Dictionary:
 		if ends.size() < 2:
 			trims[node.id] = 0.0
 			continue
-		# ... rest of the function stays the same ...
-		if ends.size() < 2:
-			trims[node.id] = 0.0
-			continue
 		var min_angle: float = PI
 		for i in ends.size():
 			for j in range(i + 1, ends.size()):
@@ -85,17 +81,26 @@ func _compute_node_trims() -> Dictionary:
 	return trims
 
 static func _outward_dir(seg: RoadSegment, is_start: bool, node: RoadNode) -> Vector3:
-	var other: RoadNode
+	if seg.curve == null: return Vector3.ZERO
+	var L := seg.curve.get_baked_length()
+	if L < 0.1: return Vector3.ZERO
+	var eps := 0.1
+	var d: Vector3
+	
+	# Use the actual curve tangent instead of the straight chord
 	if is_start:
-		other = seg.end_node
+		d = seg.curve.sample_baked(minf(eps, L)) - node.position
 	else:
-		other = seg.start_node
-	if other == null:
-		return Vector3.ZERO
-	var d: Vector3 = other.position - node.position
+		d = seg.curve.sample_baked(maxf(0.0, L - eps)) - node.position
+		
 	d.y = 0.0
 	if d.length_squared() < 0.01:
-		return Vector3.ZERO
+		# Fallback to chord if curve tangent fails
+		var other = seg.end_node if is_start else seg.start_node
+		if other == null: return Vector3.ZERO
+		d = other.position - node.position
+		d.y = 0.0
+		
 	return d.normalized()
 
 func _make_lane(seg: RoadSegment, lane_index: int, direction: String, start_trim: float, end_trim: float) -> Lane:
