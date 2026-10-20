@@ -212,6 +212,7 @@ func _click_end_straight() -> void:
 	_end_t_segment = r["t_segment"]
 	
 	if _p_start.distance_to(_p_end) < road_type.lane_width: return
+	
 	var curve := _two_point_curve(_p_start, _p_end)
 	if not _is_placement_valid(_p_start, _p_end, _start_t_segment, _end_t_segment, curve): return
 	
@@ -258,6 +259,7 @@ func _click_curve_end() -> void:
 	_end_t_segment = r["t_segment"]
 	
 	if _p_start.distance_to(_p_end) < road_type.lane_width: return
+	
 	var curve := _build_c_curve(_p_start, _p_mid1, _p_end)
 	if not _is_placement_valid(_p_start, _p_end, _start_t_segment, _end_t_segment, curve): return
 	
@@ -291,6 +293,7 @@ func _commit_scurve_preview() -> void:
 	_end_t_segment = r["t_segment"]
 	
 	if _p_start.distance_to(_p_end) < road_type.lane_width: return
+	
 	var curve := _build_s_curve(_p_start, _p_mid1, _p_mid2, _p_end)
 	if not _is_placement_valid(_p_start, _p_end, _start_t_segment, _end_t_segment, curve): return
 	
@@ -933,7 +936,7 @@ func _is_placement_valid(start: Vector3, end: Vector3, t_start: Variant, t_end: 
 	if t_end != null: t_targets.append(t_end)
 	var sharing := _sharing_nodes(start, end, t_targets)
 	var hw: float = road_type.total_width() * 0.5
-	var valid := RoadOps.is_placement_valid(start, end, hw, t_targets, sharing)
+	var valid := RoadOps.is_placement_valid(start, end, curve, hw, t_targets, sharing)
 	if valid and _would_sharp_bend(start, end, t_start, t_end):
 		valid = false
 	if valid and curve != null:
@@ -1072,10 +1075,14 @@ func _move_drag_update() -> void:
 			var last = s.curve.point_count - 1
 			if is_start:
 				s.curve.set_point_position(0, new_pos)
-				s.curve.set_point_out(0, s.curve.get_point_out(0) + delta)
+				var out = s.curve.get_point_out(0)
+				if out.length_squared() > 0.01:
+					s.curve.set_point_out(0, out + delta)
 			else:
 				s.curve.set_point_position(last, new_pos)
-				s.curve.set_point_in(last, s.curve.get_point_in(last) + delta)
+				var in_h = s.curve.get_point_in(last)
+				if in_h.length_squared() > 0.01:
+					s.curve.set_point_in(last, in_h + delta)
 			s.rebuild_mesh()
 			
 	elif _move_drag_target == "handle":
@@ -1084,6 +1091,10 @@ func _move_drag_update() -> void:
 		var cur_handle = _move_drag_segment.curve.get_point_out(0) if _move_drag_node_side else _move_drag_segment.curve.get_point_in(last)
 		var length = cur_handle.length()
 		
+		if length < 0.1:
+			var other_node = _move_drag_segment.end_node if _move_drag_node_side else _move_drag_segment.start_node
+			length = node_pos.distance_to(other_node.position) / 3.0
+			
 		var dir = (hit - node_pos).normalized()
 		var new_handle = dir * length
 		
@@ -1093,13 +1104,16 @@ func _move_drag_update() -> void:
 			_move_drag_segment.curve.set_point_in(last, new_handle)
 		_move_drag_segment.rebuild_mesh()
 		
-		# Alt mirror
 		if Input.is_key_pressed(KEY_ALT):
 			var other_seg = _find_other_segment_at_node(_move_drag_segment, _move_drag_node_side)
 			if other_seg != null:
 				var o_last = other_seg.curve.point_count - 1
 				var o_handle = other_seg.curve.get_point_in(o_last) if _move_drag_node_side else other_seg.curve.get_point_out(0)
 				var o_len = o_handle.length()
+				if o_len < 0.1:
+					var o_node_pos = other_seg.start_node.position if _move_drag_node_side else other_seg.end_node.position
+					var o_other = other_seg.end_node if _move_drag_node_side else other_seg.start_node
+					o_len = o_node_pos.distance_to(o_other.position) / 3.0
 				var o_dir = -dir
 				if _move_drag_node_side:
 					other_seg.curve.set_point_in(o_last, o_dir * o_len)
@@ -1126,7 +1140,7 @@ func _move_drag_update() -> void:
 		
 		var last = s.curve.point_count - 1
 		s.curve.set_point_out(0, start_handles["out"] + h_offset)
-		s.curve.set_point_in(last, start_handles["in"] - h_offset)
+		s.curve.set_point_in(last, start_handles["in"] + h_offset)
 		s.rebuild_mesh()
 
 func _move_click_released() -> void:
@@ -1164,6 +1178,9 @@ func _is_move_valid(moved_segments: Array) -> bool:
 		
 		for s2 in RoadGraph.segments:
 			if s1 == s2 or s2 in moved_segments: continue
+			if s1.start_node == s2.start_node or s1.start_node == s2.end_node: continue
+			if s1.end_node == s2.start_node or s1.end_node == s2.end_node: continue
+			
 			var hw2 = s2.road_type.total_width() * 0.5
 			var len2 = s2.curve.get_baked_length()
 			var steps2 = maxi(4, int(len2 / 5.0))
@@ -1200,17 +1217,31 @@ func _update_move_gizmos() -> void:
 			var seg = entry["segment"]
 			var is_start = entry["is_start"]
 			var last = seg.curve.point_count - 1
-			if is_start:
-				_add_gizmo(_move_selected_node.position + seg.curve.get_point_out(0), Color.CYAN, 0.5)
-			else:
-				_add_gizmo(_move_selected_node.position + seg.curve.get_point_in(last), Color.CYAN, 0.5)
+			var other_node = seg.end_node if is_start else seg.start_node
+			
+			var handle_vec = seg.curve.get_point_out(0) if is_start else seg.curve.get_point_in(last)
+			if handle_vec.length_squared() < 0.01:
+				handle_vec = (other_node.position - _move_selected_node.position).normalized() * 2.0
+				if not is_start:
+					handle_vec = -handle_vec
+					
+			var pos = _move_selected_node.position + handle_vec
+			_add_gizmo(pos, Color.CYAN, 0.5)
 				
 	elif _move_selected_segment != null:
 		var last = _move_selected_segment.curve.point_count - 1
 		_add_gizmo(_move_selected_segment.start_node.position, Color.GREEN, 1.0)
 		_add_gizmo(_move_selected_segment.end_node.position, Color.GREEN, 1.0)
-		_add_gizmo(_move_selected_segment.start_node.position + _move_selected_segment.curve.get_point_out(0), Color.CYAN, 0.5)
-		_add_gizmo(_move_selected_segment.end_node.position + _move_selected_segment.curve.get_point_in(last), Color.CYAN, 0.5)
+		
+		var h_out = _move_selected_segment.curve.get_point_out(0)
+		var h_in = _move_selected_segment.curve.get_point_in(last)
+		if h_out.length_squared() < 0.01:
+			h_out = (_move_selected_segment.end_node.position - _move_selected_segment.start_node.position).normalized() * 2.0
+		if h_in.length_squared() < 0.01:
+			h_in = (_move_selected_segment.start_node.position - _move_selected_segment.end_node.position).normalized() * 2.0
+			
+		_add_gizmo(_move_selected_segment.start_node.position + h_out, Color.CYAN, 0.5)
+		_add_gizmo(_move_selected_segment.end_node.position + h_in, Color.CYAN, 0.5)
 
 func _add_gizmo(pos: Vector3, color: Color, radius: float) -> void:
 	var mesh = MeshInstance3D.new()

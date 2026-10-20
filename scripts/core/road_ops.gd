@@ -84,36 +84,36 @@ static func find_lane_under_point(pos: Vector3) -> Variant:
 
 static func is_placement_valid(
 		start: Vector3, end: Vector3,
+		new_curve: Curve3D,
 		new_half_width: float,
 		t_segments: Array,
 		sharing_nodes: Array) -> bool:
 	if start.distance_to(end) < 0.5:
 		return false
-	var a0 := Vector2(start.x, start.z)
-	var a1 := Vector2(end.x, end.z)
+	
+	var new_length := new_curve.get_baked_length()
+	var new_steps := maxi(2, int(new_length / 5.0))
+	
 	for seg in RoadGraph.segments:
 		if seg.start_node == null or seg.end_node == null: continue
 		if seg in t_segments: continue
 		if seg.start_node in sharing_nodes or seg.end_node in sharing_nodes: continue
 		
 		var b_hw: float = seg.road_type.total_width() * 0.5
-		
-		# Approximate curve with line segments for collision check
 		var length := seg.curve.get_baked_length()
 		var steps := maxi(2, int(length / 5.0))
-		var prev_p := seg.curve.sample_baked(0)
-		var min_d := INF
 		
-		for i in range(1, steps + 1):
-			var curr_p := seg.curve.sample_baked((float(i)/steps) * length)
-			var b0 := Vector2(prev_p.x, prev_p.z)
-			var b1 := Vector2(curr_p.x, curr_p.z)
-			var d := _seg_seg_min_dist_2d(a0, a1, b0, b1)
-			if d < min_d: min_d = d
-			prev_p = curr_p
+		for i in range(new_steps):
+			var a0 := new_curve.sample_baked((float(i)/new_steps) * new_length)
+			var a1 := new_curve.sample_baked((float(i+1)/new_steps) * new_length)
 			
-		if min_d < new_half_width + b_hw - 0.01:
-			return false
+			for j in range(steps):
+				var b0 := seg.curve.sample_baked((float(j)/steps) * length)
+				var b1 := seg.curve.sample_baked((float(j+1)/steps) * length)
+				
+				var d := _seg_seg_min_dist_2d(Vector2(a0.x, a0.z), Vector2(a1.x, a1.z), Vector2(b0.x, b0.z), Vector2(b1.x, b1.z))
+				if d < new_half_width + b_hw - 0.01:
+					return false
 	return true
 
 static func _get_closest_point_on_curve(p: Vector3, curve: Curve3D, length: float) -> Dictionary:
