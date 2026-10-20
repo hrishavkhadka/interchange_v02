@@ -115,3 +115,11 @@ ADR-style log of non-obvious design choices. Each entry: what was decided, why, 
 **Rejected:** Aggregating segments into a `LogicalRoad` object.
 
 **Consequences:** Features needing "the whole road" (e.g. MoveIt drag across waypoints) must traverse segments via node adjacency. Watch for this when implementing MoveIt.
+
+---
+
+## ADR-011 — Move It handle dragging preserves magnitude and allows broken tangents
+**Decided:** Dragging a tangent handle rotates it around the node but preserves its original length. By default, adjacent segments are allowed to break their tangent (creating sharp corners). Holding `Alt` mirrors the rotation to the adjacent segment to keep the road smooth.
+**Why:** Allowing handle lengths to stretch freely causes self-intersecting loops. Preserving magnitude prevents "nipple" artifacts. Allowing tangents to break by default matches standard 3D modeling tools and gives the user full control over sharp corners.
+**Rejected:** Auto-mirroring handles by default (can be frustrating for creating specific corners); allowing handles to scale infinitely.
+**Consequences:** Players can build sharp corners by default, but must hold `Alt` to keep roads smooth.

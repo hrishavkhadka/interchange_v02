@@ -109,3 +109,24 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 **Detected in:** Phase 3/4
 **Files:** `scripts/build/road_builder.gd`
 **Status:** fixed
+
+## Move It — Dragging a node stretches its handles
+**Cause:** `Curve3D.get_point_in()` and `get_point_out()` return offsets *relative* to the node position. When the node position was moved, the handles moved with it automatically. The drag code also added the drag delta to the handles, causing them to stretch unnaturally.
+**Fix:** Node dragging only updates the point position (`set_point_position`). The handles are left alone, so they naturally translate with the node.
+**Detected in:** Phase 4/4
+**Files:** `scripts/build/road_builder.gd`
+**Status:** fixed
+
+## Move It — Segment bowing creates an S-shape instead of a U-shape
+**Cause:** The bowing code added a perpendicular offset to the start handle but *subtracted* it from the end handle, causing the tangents to point in opposite directions.
+**Fix:** The offset is now added to both handles, creating a smooth U-shaped bow.
+**Detected in:** Phase 4/4
+**Files:** `scripts/build/road_builder.gd`
+**Status:** fixed
+
+## Move It — Straight road handles are invisible or tiny
+**Cause:** Straight roads have zero-length handles. The visual gizmo used a fixed `2.0` length, but the drag logic used `dist / 3.0`. The mismatch caused the handle to jump in size when the drag began. A sign error also caused one handle to point backwards into the road.
+**Fix:** Both the gizmo rendering and the drag logic now use `dist / 3.0` for synthetic handles. The sign error was removed.
+**Detected in:** Phase 4/4
+**Files:** `scripts/build/road_builder.gd`
+**Status:** fixed

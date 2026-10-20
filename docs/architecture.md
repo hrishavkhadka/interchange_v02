@@ -167,17 +167,22 @@ Represents one traversal unit (lane or arc) along a vehicle's path.
 
 Main road placement tool.
 
-**Modes** (`enum Mode`): `POINTER`, `ROAD`, `DEMOLISH`, `REVERSE`, `UPDATE`.
+**Modes** (`enum Mode`): `POINTER`, `ROAD`, `DEMOLISH`, `REVERSE`, `UPDATE`, `MOVE`.
 
-**Build stages** (`enum BuildStage`): `NONE`, `STRAIGHT_END`, `CURVE_END`, `CURVE_BEND`, `SCURVE_MID1`, `SCURVE_MID2`, `SCURVE_END`.
-
-**Validation**: `_is_placement_valid()` centralizes all checks (overlaps, sharp bends, minimum curve radius). Called from both the live preview (`_validate_preview`) and the commit handlers (`_click_curve_end`, etc.).
+**Build stages** (`enum BuildStage`): `NONE`, `STRAIGHT_END`, `CURVE_MID`, `CURVE_END`, `SCURVE_MID1`, `SCURVE_MID2`, `SCURVE_END`.
 
 **Shape flow** (from `settings.road_shape`):
-
 - `STRAIGHT`: click start → click end → commit.
-- `CURVE`: click start → click end (mid control) → click again to confirm bend → commit.
+- `CURVE`: click start → click mid (control point) → click end → commit.
 - `S_CURVE`: click start → click control1 → click control2 → click end → commit.
+
+**Move It Tool (`Mode.MOVE`)**:
+- Selects nodes or segments. Renders green node spheres and cyan handle spheres (connected by lines).
+- **Node Dragging**: Translates the node position. Connected `Curve3D` start/end points update. Handles translate automatically.
+- **Handle Dragging**: Rotates the handle around the node. Magnitude is preserved. `Alt` mirrors the rotation to the adjacent segment.
+- **Segment Bowing**: Adds a perpendicular offset to both handles, creating a U-shape.
+- **Validation**: On release, checks against other segments. Reverts if overlapping.
+- **Straight Roads**: Synthesizes handles at `dist / 3.0` to allow dragging straight roads into curves.
 
 ### `SnapResolver` — `scripts/build/snap_resolver.gd`
 
