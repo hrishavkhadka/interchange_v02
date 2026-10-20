@@ -19,6 +19,8 @@ var _speed_buttons: Array[Button] = []
 var _fail_popup: Control
 var _pass_popup: Control
 
+var _elev_label: Label
+
 func _ready() -> void:
 	layer = 2
 	_build_bottom_left()
@@ -55,8 +57,14 @@ func _build_bottom_left() -> void:
 	_road_type_label.add_theme_font_size_override("font_size", 12)
 	vbox.add_child(_road_type_label)
 
+	_elev_label = Label.new()
+	_elev_label.text = "Elevation: 0.0m"
+	_elev_label.add_theme_font_size_override("font_size", 12)
+	_elev_label.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
+	vbox.add_child(_elev_label)
+
 	_hint_label = Label.new()
-	_hint_label.text = "LMB: place / act\nRMB/Esc: cancel\n1-9/0: road type  L: lanes\nSpace: play/pause\nF9: save  F10: load"
+	_hint_label.text = "LMB: place / act\nRMB/Esc: cancel\nPgUp/PgDn or Shift+W/S: Elevation\n1-9/0: road type  L: lanes\nSpace: play/pause\nF9: save  F10: load"
 	_hint_label.add_theme_font_size_override("font_size", 11)
 	_hint_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.8))
 	vbox.add_child(_hint_label)
@@ -249,3 +257,7 @@ func set_cost(v: float) -> void:
 func set_road_type(name: String) -> void:
 	if _road_type_label != null:
 		_road_type_label.text = "Road: " + name
+
+func set_elevation(h: float) -> void:
+	if _elev_label != null:
+		_elev_label.text = "Elevation: %.1fm" % h

@@ -11,3 +11,4 @@ enum RoadShape { STRAIGHT, CURVE, S_CURVE }
 @export var snap_angle: bool = true
 @export var angle_step_deg: float = 15.0
 @export var road_shape: RoadShape = RoadShape.STRAIGHT
+@export var elevation_step: float = 1.0

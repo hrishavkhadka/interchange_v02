@@ -13,6 +13,8 @@ var _material: StandardMaterial3D
 var _base_color: Color = Color(0.22, 0.22, 0.25)
 var _hovered: bool = false
 
+var _pillar_root: Node3D
+
 func setup(rt: RoadType, c: Curve3D) -> void:
 	road_type = rt
 	curve = c
@@ -44,7 +46,11 @@ func cost() -> float:
 	var lanes := road_type.lane_count()
 	var cfg := CostConfig.new()
 	var base := L * float(lanes) * cfg.lane_rate
-	return base
+	
+	# Add elevation cost multiplier
+	var avg_h := avg_abs_height()
+	var multiplier := 1.0 + (avg_h * 0.5)
+	return base * multiplier
 
 func set_preview_validity(valid: bool) -> void:
 	if _material == null:
@@ -109,6 +115,7 @@ func _do_rebuild() -> void:
 		inset_end = minf(RoadMesh.VISUAL_INSET, L / 3.0)
 	var mesh := RoadMesh.build_slab(curve, road_type, inset_start, inset_end)
 	_mesh_instance.mesh = mesh
+	_rebuild_pillars()
 
 static func _is_pure_waypoint(node: RoadNode) -> bool:
 	if node == null:
@@ -126,3 +133,37 @@ func _ensure_mesh_instance() -> void:
 	_material.roughness = 0.95
 	_mesh_instance.material_override = _material
 	add_child(_mesh_instance)
+
+func _rebuild_pillars() -> void:
+	if _pillar_root != null:
+		_pillar_root.queue_free()
+		_pillar_root = null
+		
+	if start_node == null or end_node == null: return
+	if start_node.position.y <= 0.1 and end_node.position.y <= 0.1: return
+	
+	_pillar_root = Node3D.new()
+	add_child(_pillar_root)
+	
+	var L := curve.get_baked_length()
+	var step := 15.0
+	var count := int(L / step)
+	var width := road_type.total_width() * 0.6
+	var depth := width
+	
+	for i in range(1, count):
+		var d := i * step
+		var p := curve.sample_baked(d)
+		if p.y <= 0.1: continue
+		
+		var mesh_inst = MeshInstance3D.new()
+		var box = BoxMesh.new()
+		box.size = Vector3(width, p.y, depth)
+		mesh_inst.mesh = box
+		
+		var mat = StandardMaterial3D.new()
+		mat.albedo_color = Color(0.3, 0.3, 0.35)
+		mesh_inst.material_override = mat
+		
+		mesh_inst.position = Vector3(p.x, p.y * 0.5, p.z)
+		_pillar_root.add_child(mesh_inst)

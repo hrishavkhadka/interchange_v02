@@ -68,6 +68,8 @@ var _move_backup_curves: Dictionary = {}
 var _move_backup_nodes: Dictionary = {}
 var _move_gizmos: Array[MeshInstance3D] = []
 
+var _current_elevation: float = 0.0
+
 @onready var _preview_root: Node3D = $PreviewRoot
 @onready var _segments_root: Node3D = $SegmentsRoot
 
@@ -149,13 +151,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		_move_drag_update()
 	elif event is InputEventKey:
 		var ke := event as InputEventKey
-		if ke.pressed and ke.keycode == KEY_ESCAPE:
-			if mode == Mode.MOVE:
-				_move_selected_node = null
-				_move_selected_segment = null
-				_update_move_gizmos()
-			elif _stage != BuildStage.NONE:
-				_cancel()
+		if ke.pressed:
+			var step := settings.elevation_step
+			if ke.keycode == KEY_PAGEUP or (ke.keycode == KEY_W and ke.shift_pressed):
+				_current_elevation += step
+				_update_elevation_display()
+			elif ke.keycode == KEY_PAGEDOWN or (ke.keycode == KEY_S and ke.shift_pressed):
+				_current_elevation -= step
+				_update_elevation_display()
+			elif ke.keycode == KEY_ESCAPE:
+				if mode == Mode.MOVE:
+					_move_selected_node = null
+					_move_selected_segment = null
+					_update_move_gizmos()
+				elif _stage != BuildStage.NONE:
+					_cancel()
 
 func _handle_left_click() -> void:
 	if _stage == BuildStage.NONE:
@@ -188,6 +198,7 @@ func _start_drag() -> void:
 	var r := SnapResolver.resolve_position(hit, settings, road_type)
 	
 	_p_start = r["point"]
+	_p_start.y = _current_elevation
 	_start_t_segment = r["t_segment"]
 	_start_guide_dir = r["guide_dir"] if r.has("guide_dir") else null
 	_end_t_segment = null
@@ -209,6 +220,7 @@ func _click_end_straight() -> void:
 	if hit_raw == null: return
 	var r := _resolve_end(hit_raw, _p_start, _start_t_segment, _start_guide_dir)
 	_p_end = r["point"]
+	_p_end.y = _current_elevation
 	_end_t_segment = r["t_segment"]
 	
 	if _p_start.distance_to(_p_end) < road_type.lane_width: return
@@ -247,6 +259,7 @@ func _click_curve_mid() -> void:
 	var hit: Vector3 = hit_raw
 	var r := _resolve_end(hit, _p_start, _start_t_segment, _start_guide_dir)
 	_p_mid1 = r["point"]
+	_p_mid1.y = _current_elevation
 	
 	if _p_start.distance_to(_p_mid1) < road_type.lane_width: return
 	_stage = BuildStage.CURVE_END
@@ -256,6 +269,7 @@ func _click_curve_end() -> void:
 	if hit_raw == null: return
 	var r := _resolve_end(hit_raw, _p_mid1, null, null)
 	_p_end = r["point"]
+	_p_end.y = _current_elevation
 	_end_t_segment = r["t_segment"]
 	
 	if _p_start.distance_to(_p_end) < road_type.lane_width: return
@@ -275,6 +289,7 @@ func _click_scurve_mid1() -> void:
 	var hit: Vector3 = hit_raw
 	var r := _resolve_end(hit, _p_start, _start_t_segment, _start_guide_dir)
 	_p_mid1 = r["point"]
+	_p_mid1.y = _current_elevation
 	_stage = BuildStage.SCURVE_MID2
 
 func _click_scurve_mid2() -> void:
@@ -283,6 +298,7 @@ func _click_scurve_mid2() -> void:
 	var hit: Vector3 = hit_raw
 	var r := _resolve_end(hit, _p_mid1, null, null)
 	_p_mid2 = r["point"]
+	_p_mid2.y = _current_elevation
 	_stage = BuildStage.SCURVE_END
 
 func _commit_scurve_preview() -> void:
@@ -290,6 +306,7 @@ func _commit_scurve_preview() -> void:
 	if hit_raw == null: return
 	var r := _resolve_end(hit_raw, _p_mid2, null, null)
 	_p_end = r["point"]
+	_p_end.y = _current_elevation
 	_end_t_segment = r["t_segment"]
 	
 	if _p_start.distance_to(_p_end) < road_type.lane_width: return
@@ -599,6 +616,9 @@ func _resolve_end(raw: Vector3, origin: Vector3, origin_t_seg: Variant, origin_g
 		var dir_r := SnapResolver.resolve_direction(origin, pos, origin_t_seg, origin_guide, settings)
 		pos = dir_r["point"]
 		dir_kind = dir_r["kind"]
+		
+	# Override Y with the current build elevation
+	pos.y = _current_elevation
 	return { "point": pos, "kind": kind, "t_segment": t_seg, "direction_kind": dir_kind }
 	
 func _would_sharp_bend(start: Vector3, end: Vector3, start_t_segment: Variant, end_t_segment: Variant) -> bool:
@@ -1105,6 +1125,8 @@ func _move_drag_update() -> void:
 			else:
 				s.curve.set_point_position(last, new_pos)
 			s.rebuild_mesh()
+			_rebuild_neighbours(s.start_node, s)
+			_rebuild_neighbours(s.end_node, s)
 		_update_move_gizmos()
 			
 	elif _move_drag_target == "handle":
@@ -1178,6 +1200,8 @@ func _move_drag_update() -> void:
 		s.curve.set_point_out(0, new_out)
 		s.curve.set_point_in(last, new_in)
 		s.rebuild_mesh()
+		_rebuild_neighbours(s.start_node, s)
+		_rebuild_neighbours(s.end_node, s)
 		_update_move_gizmos()
 
 func _move_click_released() -> void:
@@ -1329,3 +1353,8 @@ func _add_line_gizmo(from: Vector3, to: Vector3, color: Color) -> void:
 	
 	add_child(mesh_inst)
 	_move_gizmos.append(mesh_inst)
+
+func _update_elevation_display() -> void:
+	var hud = get_tree().current_scene.find_child("HUD", true, false)
+	if hud != null and hud.has_method("set_elevation"):
+		hud.set_elevation(_current_elevation)
