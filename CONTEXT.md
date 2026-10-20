@@ -76,7 +76,7 @@ Levels are saved as JSON in `user://levels/`:
   - [x] **Phase 1/4 — Curve geometry & builder.** Real Bézier handles, curve passes through mid-click, correct click sequence, straight preview fixed, minimum radius check added, validation centralized, mesh/node desync fixed.
   - [x] **Phase 2/4 — Curve-aware hit detection.** `RoadOps` now projects onto the actual `Curve3D` for snapping and collision.
   - [x] **Phase 3/4 — Curve-preserving split.** `_split_existing_segment` uses `CurveMath.slice` to preserve curve geometry during T-junctions. Absorbing waypoints preserves tangents.
-  - [x] **Phase 4/4 — Move It Tool.** Node dragging, handle dragging (with Alt-mirroring), and segment bowing. Live validation and straight-road handle synthesis.
+  - [x] **Phase 4/4 — Move It Tool & Save/Load.** Node/handle dragging, segment bowing (with loop clamping), Alt-mirroring, exact Bézier save/load (v2).
 - **Known pending issues**: see `docs/pitfalls.md` (`Status: open` entries).
 
 ## 8. Workflow & Conventions

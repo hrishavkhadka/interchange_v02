@@ -130,3 +130,17 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 **Detected in:** Phase 4/4
 **Files:** `scripts/build/road_builder.gd`
 **Status:** fixed
+
+## LevelIO — Reloaded curves flatten and Move It breaks
+**Cause:** `_serialize()` sampled the curve into a dense polyline (zero handles). On reload, the game treated them as straight roads with many points, causing absorption to flatten them and Move It to only drag the first/last point.
+**Fix:** Bumped format to v2. `_serialize()` now saves the exact `Curve3D` control points and in/out handles. Old v1 saves are safely detected and loaded as polylines.
+**Detected in:** Phase 4/4
+**Files:** `scripts/game/level_io.gd`
+**Status:** fixed
+
+## Move It — Segment bowing creates infinite loops
+**Cause:** Adding the drag offset directly to the handles caused the handle magnitude to grow without limit, eventually exceeding the chord length and causing self-intersection.
+**Fix:** Clamped the handle magnitude to `chord_len / 3.0`, the mathematical maximum for a smooth cubic Bézier.
+**Detected in:** Phase 4/4
+**Files:** `scripts/build/road_builder.gd`
+**Status:** fixed

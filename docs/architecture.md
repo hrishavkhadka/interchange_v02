@@ -16,6 +16,7 @@ Stubs marked `TODO` — flesh out when touched.
 8. [Mesh Generation](#8-mesh-generation)
 9. [Curve Math & Geometry](#9-curve-math--geometry)
 10. [UI](#10-ui)
+11. [Saved Format](#11-saved-format)
 
 ---
 
@@ -272,6 +273,17 @@ In-game HUD overlay.
 Level metadata display (budget, time, demand matrix).
 
 ---
+
+## 11. Saved Format
+Levels are saved as JSON in `user://levels/`.
+**Format Version**: 2
+- `version`, `bounds`, `budget`, `time_limit`
+- `blockers`, `fixed_roads`, `props`
+- `demand matrix`, `vehicle_order`
+- `nodes`: `[position, is_waypoint, is_entry, is_exit, demand]`
+- `segments`: `[road_type, start_node, end_node, curve_data]`
+  - `curve_data`: Array of `{ pos, in, out }` for each control point, preserving exact Bézier geometry.
+- Arc overrides via `ArcOverrides`, serialized alongside.
 
 ## Appendix: Data Flow
 

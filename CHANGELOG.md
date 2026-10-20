@@ -3,6 +3,18 @@
 Append-only log of every phase commit. **Newest entries at the top.**
 
 
+## 2026-10-19 — Phase 4/4 — Move It Tool & Save/Load Fix
+**Commit:** `<sha>` — `Phase 4/4 — Move It Tool & Save/Load Fix`
+**Files:** `scripts/build/road_builder.gd`, `scripts/ui/main_toolbar.gd`, `scripts/core/road_ops.gd`, `scripts/game/level_io.gd`, `context.md`, `CHANGELOG.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/pitfalls.md`
+**Why:** Players needed to adjust placed roads without rebuilding. Dragging segment middles allowed infinite handle growth, causing loops. Saving and reloading levels broke curves by converting them to polylines.
+**What:**
+- Added `Mode.MOVE`. Selecting a node/segment shows 3D gizmos for dragging.
+- **Node Dragging:** Translates node and updates curve endpoints.
+- **Handle Dragging:** Rotates handles, preserving magnitude. `Alt` mirrors to adjacent segments.
+- **Segment Bowing:** Adds perpendicular offset to both handles (U-shape). Magnitude is mathematically clamped to `chord_len / 3.0` to make loops impossible.
+- **Save/Load (v2):** `level_io.gd` now serializes exact `Curve3D` positions and in/out handles, preserving perfect Bézier geometry across reloads. Old v1 polyline saves fall back safely.
+**Tested:** Node translation, handle rotation, bowing (with loop clamping), save/load curves and Move It on reloaded roads.
+**Follow-ups:** Phase 5 (Lane Generation & Simulation).
 
 ## 2026-10-19 — Phase 4/4 — Move It Tool (Node/Handle/Segment Dragging)
 **Commit:** `<sha>` — `Phase 4/4 — Move It Tool (Node/Handle/Segment Dragging)`

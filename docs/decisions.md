@@ -123,3 +123,10 @@ ADR-style log of non-obvious design choices. Each entry: what was decided, why, 
 **Why:** Allowing handle lengths to stretch freely causes self-intersecting loops. Preserving magnitude prevents "nipple" artifacts. Allowing tangents to break by default matches standard 3D modeling tools and gives the user full control over sharp corners.
 **Rejected:** Auto-mirroring handles by default (can be frustrating for creating specific corners); allowing handles to scale infinitely.
 **Consequences:** Players can build sharp corners by default, but must hold `Alt` to keep roads smooth.
+
+---
+
+## ADR-012 — Save curve data as Bézier handles, not polylines
+**Decided:** `level_io.gd` serializes `Curve3D` as an array of control points and their `in`/`out` handles.
+**Why:** Sampling curves into polylines destroys tangent data, breaking Move It and waypoint absorption on reloaded levels.
+**Consequences:** Format version bumped to 2. A fallback is maintained for loading v1 (polyline) saves.

@@ -1,7 +1,7 @@
 extends Node
 
 const LEVEL_DIR: String = "user://levels"
-const FORMAT_VERSION: int = 1
+const FORMAT_VERSION: int = 2
 
 func ensure_dir() -> void:
 	DirAccess.make_dir_recursive_absolute(LEVEL_DIR)
@@ -51,13 +51,19 @@ func _serialize() -> Dictionary:
 			continue
 		if seg.start_node == null or seg.end_node == null:
 			continue
-		var pts: Array = []
-		var L: float = seg.curve.get_baked_length()
-		var sample_count: int = maxi(2, int(L * 0.5))
-		for k in range(sample_count + 1):
-			var t: float = float(k) / float(sample_count)
-			var p: Vector3 = seg.curve.sample_baked(t * L)
-			pts.append([p.x, p.y, p.z])
+			
+		# Save exact Bezier control points and handles
+		var curve_data: Array = []
+		for k in seg.curve.point_count:
+			var p = seg.curve.get_point_position(k)
+			var in_h = seg.curve.get_point_in(k)
+			var out_h = seg.curve.get_point_out(k)
+			curve_data.append({
+				"pos": [p.x, p.y, p.z],
+				"in": [in_h.x, in_h.y, in_h.z],
+				"out": [out_h.x, out_h.y, out_h.z]
+			})
+			
 		segments_data.append({
 			"road_type": seg.road_type.id,
 			"lane_layout": seg.road_type.lane_layout_string,
@@ -65,7 +71,7 @@ func _serialize() -> Dictionary:
 			"speed_limit_kmh": seg.road_type.speed_limit_kmh,
 			"start_node": node_to_idx.get(seg.start_node, -1),
 			"end_node": node_to_idx.get(seg.end_node, -1),
-			"curve": pts,
+			"curve_data": curve_data,
 		})
 
 	var nodes_data: Array = []
@@ -137,13 +143,30 @@ func _deserialize(data: Dictionary) -> void:
 		rt.lane_layout_string = String(e.get("lane_layout", "FB"))
 		rt.lane_width = float(e.get("lane_width", 3.2))
 		rt.speed_limit_kmh = float(e.get("speed_limit_kmh", 50.0))
-		var pts: Array = e.get("curve", [])
-		if pts.size() < 2:
-			continue
+		
 		var curve := Curve3D.new()
-		for p_v in pts:
-			var p: Array = p_v
-			curve.add_point(Vector3(p[0], p[1], p[2]))
+		if e.has("curve_data"):
+			# v2 format: exact bezier handles
+			var c_data: Array = e.get("curve_data", [])
+			for p_v in c_data:
+				var pd: Dictionary = p_v
+				var p_raw: Array = pd.get("pos", [0,0,0])
+				var i_raw: Array = pd.get("in", [0,0,0])
+				var o_raw: Array = pd.get("out", [0,0,0])
+				curve.add_point(
+					Vector3(p_raw[0], p_raw[1], p_raw[2]),
+					Vector3(i_raw[0], i_raw[1], i_raw[2]),
+					Vector3(o_raw[0], o_raw[1], o_raw[2])
+				)
+		else:
+			# v1 format: fallback to polyline points
+			var pts: Array = e.get("curve", [])
+			if pts.size() < 2:
+				continue
+			for p_v in pts:
+				var p: Array = p_v
+				curve.add_point(Vector3(p[0], p[1], p[2]))
+				
 		var sn: int = int(e.get("start_node", -1))
 		var en: int = int(e.get("end_node", -1))
 		if sn < 0 or en < 0 or sn >= created_nodes.size() or en >= created_nodes.size():
