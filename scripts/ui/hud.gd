@@ -32,6 +32,7 @@ func _ready() -> void:
 	GameState.state_changed.connect(_on_state)
 	GameState.failed.connect(_show_fail)
 	GameState.passed.connect(_show_pass)
+	GameState.elevation_changed.connect(set_elevation) # <-- Add this line
 
 	_on_timer(GameState.time_remaining)
 	_on_counters(0, 0, GameState.target_count)

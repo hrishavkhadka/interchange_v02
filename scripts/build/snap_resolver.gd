@@ -6,9 +6,9 @@ const WAYPOINT_SNAP_RADIUS: float = 2.0
 const ANGLE_TOLERANCE_DEG: float = 9.0
 const GUIDE_SNAP_RADIUS: float = 2.5
 
-static func resolve_position(raw: Vector3, settings: BuildSettings, road_type: RoadType) -> Dictionary:
+static func resolve_position(raw: Vector3, ray_origin: Vector3, ray_dir: Vector3, settings: BuildSettings, road_type: RoadType) -> Dictionary:
 	if settings.snap_node:
-		var n := _find_snap_node(raw)
+		var n := _find_snap_node_ray(ray_origin, ray_dir)
 		if n != null:
 			return { "point": n.position, "kind": "node", "t_segment": null, "guide_dir": null }
 
@@ -18,7 +18,6 @@ static func resolve_position(raw: Vector3, settings: BuildSettings, road_type: R
 			var lane: Lane = l["lane"]
 			var seg: RoadSegment = l["segment"]
 			var p: Vector3 = l["point"]
-			# Don't snap to a lane if we are right at its segment's endpoint
 			if p.distance_to(seg.start_node.position) > 1.0 \
 					and p.distance_to(seg.end_node.position) > 1.0:
 				return { "point": p, "kind": "lane", "t_segment": seg, "guide_dir": null }
@@ -32,7 +31,7 @@ static func resolve_position(raw: Vector3, settings: BuildSettings, road_type: R
 			if p.distance_to(seg.start_node.position) > 1.0 \
 					and p.distance_to(seg.end_node.position) > 1.0:
 				return { "point": p, "kind": "segment", "t_segment": seg, "bake_dist": b_d, "guide_dir": null }
-				
+
 	if settings.snap_guide and road_type != null:
 		var snap_ticks: bool = settings.snap_length
 		var gp: Variant = _try_guide_snap(raw, road_type.lane_width, snap_ticks)
@@ -45,15 +44,17 @@ static func resolve_position(raw: Vector3, settings: BuildSettings, road_type: R
 	return { "point": raw, "kind": "free", "t_segment": null, "guide_dir": null }
 
 # ... (rest of the file remains unchanged)
-static func _find_snap_node(raw: Vector3) -> RoadNode:
+static func _find_snap_node_ray(origin: Vector3, dir: Vector3) -> RoadNode:
 	var best: RoadNode = null
-	var best_d: float = INF
+	var best_d: float = 5.0 # 5m max distance from ray to node
 	for n in RoadGraph.nodes:
 		var limit: float = WAYPOINT_SNAP_RADIUS if n.is_pass_through() else NODE_SNAP_RADIUS
-		var d: float = n.position.distance_to(raw)
-		if d > limit:
-			continue
-		if d < best_d:
+		var to_n = n.position - origin
+		var proj = to_n.dot(dir)
+		if proj < 0: continue
+		var closest = origin + dir * proj
+		var d = closest.distance_to(n.position)
+		if d < minf(best_d, limit):
 			best_d = d
 			best = n
 	return best

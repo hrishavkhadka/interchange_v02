@@ -135,35 +135,31 @@ func _ensure_mesh_instance() -> void:
 	add_child(_mesh_instance)
 
 func _rebuild_pillars() -> void:
-	if _pillar_root != null:
-		_pillar_root.queue_free()
-		_pillar_root = null
-		
-	if start_node == null or end_node == null: return
-	if start_node.position.y <= 0.1 and end_node.position.y <= 0.1: return
+	if start_node != null:
+		_build_node_pillar(start_node)
+	if end_node != null:
+		_build_node_pillar(end_node)
+
+func _build_node_pillar(node: RoadNode) -> void:
+	if node.position.y <= 0.1: return
+	if node.pillar_instance != null: return
 	
-	_pillar_root = Node3D.new()
-	add_child(_pillar_root)
+	var mesh_inst = MeshInstance3D.new()
+	var box = BoxMesh.new()
+	var width = road_type.total_width() * 0.6
+	box.size = Vector3(width, node.position.y, width)
+	mesh_inst.mesh = box
 	
-	var L := curve.get_baked_length()
-	var step := 15.0
-	var count := int(L / step)
-	var width := road_type.total_width() * 0.6
-	var depth := width
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color(0.3, 0.3, 0.35)
+	mesh_inst.material_override = mat
 	
-	for i in range(1, count):
-		var d := i * step
-		var p := curve.sample_baked(d)
-		if p.y <= 0.1: continue
-		
-		var mesh_inst = MeshInstance3D.new()
-		var box = BoxMesh.new()
-		box.size = Vector3(width, p.y, depth)
-		mesh_inst.mesh = box
-		
-		var mat = StandardMaterial3D.new()
-		mat.albedo_color = Color(0.3, 0.3, 0.35)
-		mesh_inst.material_override = mat
-		
-		mesh_inst.position = Vector3(p.x, p.y * 0.5, p.z)
-		_pillar_root.add_child(mesh_inst)
+	mesh_inst.position = Vector3(node.position.x, node.position.y * 0.5, node.position.z)
+	get_tree().current_scene.add_child(mesh_inst)
+	node.pillar_instance = mesh_inst
+	
+static func clear_node_pillar(node: RoadNode) -> void:
+	if node != null and node.pillar_instance != null:
+		if is_instance_valid(node.pillar_instance):
+			node.pillar_instance.queue_free()
+		node.pillar_instance = null

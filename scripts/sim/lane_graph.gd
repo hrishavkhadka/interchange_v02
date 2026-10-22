@@ -204,7 +204,6 @@ static func _end_tangent(c: Curve3D, length: float) -> Vector3:
 	var p_end: Vector3 = c.sample_baked(length)
 	var p_before: Vector3 = c.sample_baked(maxf(length - 0.3, 0.0))
 	var t: Vector3 = p_end - p_before
-	t.y = 0.0
 	if t.length_squared() < 0.0001:
 		return Vector3.FORWARD
 	return t.normalized()
@@ -214,7 +213,6 @@ static func _start_tangent(c: Curve3D) -> Vector3:
 	var p_start: Vector3 = c.sample_baked(0.0)
 	var p_after: Vector3 = c.sample_baked(minf(0.3, length))
 	var t: Vector3 = p_after - p_start
-	t.y = 0.0
 	if t.length_squared() < 0.0001:
 		return Vector3.FORWARD
 	return t.normalized()

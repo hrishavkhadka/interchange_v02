@@ -5,6 +5,7 @@ signal timer_tick(remaining: float)
 signal counters_changed(spawned: int, cleared: int, target: int)
 signal failed()
 signal passed()
+signal elevation_changed(new_elevation: float)
 
 enum State { BUILD, PLAYING, PAUSED, FAILED_PLAYING, PASSED_PLAYING }
 

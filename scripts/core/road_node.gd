@@ -12,6 +12,8 @@ var map_label: String = ""
 var demand: Dictionary = {}
 var segment_ends: Array = []
 var forced_junction: bool = false
+var pillar_instance: MeshInstance3D = null
+
 
 func _init(p_position: Vector3, p_id: int) -> void:
 	position = p_position
