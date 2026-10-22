@@ -239,23 +239,28 @@ func _click_end_straight() -> void:
 	_start_indicator.hide_indicator()
 	_guidelines.clear()
 	
+	var start_node: RoadNode = null
+	var end_node: RoadNode = null
+	
 	if _start_t_segment != null:
 		var seg_after_start: Variant = _absorb_chain(_start_t_segment, _p_start)
-		if seg_after_start != null: _split_existing_segment(seg_after_start, _p_start)
+		if seg_after_start != null: start_node = _split_existing_segment(seg_after_start, _p_start)
 		
 	var end_seg: Variant = null
 	var reloc: Variant = RoadOps.find_segment_under_point(_p_end)
 	if reloc != null: end_seg = reloc["segment"]
 	if end_seg != null:
 		var seg_after_end: Variant = _absorb_chain(end_seg, _p_end)
-		if seg_after_end != null: _split_existing_segment(seg_after_end, _p_end)
-
-	var start_node := RoadGraph.get_or_create(_p_start)
-	var end_node := RoadGraph.get_or_create(_p_end)
+		if seg_after_end != null: end_node = _split_existing_segment(seg_after_end, _p_end)
+		
+	if start_node == null: start_node = RoadGraph.get_or_create(_p_start)
+	if end_node == null: end_node = RoadGraph.get_or_create(_p_end)
+	
 	_start_t_segment = null
 	_start_guide_dir = null
 	if start_node == end_node: return
-	_create_chain(start_node, end_node, road_type)
+	
+	_create_segment_with_curve(start_node, end_node, road_type, curve)
 	cost_changed.emit(total_cost())
 
 func _click_curve_mid() -> void:
@@ -307,7 +312,7 @@ func _click_scurve_mid2() -> void:
 	_stage = BuildStage.SCURVE_END
 
 func _commit_scurve_preview() -> void:
-	var hit_raw: Variant = _ground_hit()
+	var hit_raw: Variant = _ground_hit(_current_elevation)
 	if hit_raw == null: return
 	var r := _resolve_end(hit_raw, _p_mid2, null, null)
 	_p_end = r["point"]
@@ -332,29 +337,26 @@ func _commit_curve_data(curve: Curve3D, start_pos: Vector3, end_pos: Vector3, t_
 	_start_indicator.hide_indicator()
 	_guidelines.clear()
 	
+	var start_node: RoadNode = null
+	var end_node: RoadNode = null
+	
 	if _start_t_segment != null:
 		var seg_after_start: Variant = _absorb_chain(_start_t_segment, start_pos)
-		if seg_after_start != null: _split_existing_segment(seg_after_start, start_pos)
+		if seg_after_start != null: start_node = _split_existing_segment(seg_after_start, start_pos)
 		
 	var end_seg: Variant = null
 	var reloc: Variant = RoadOps.find_segment_under_point(end_pos)
 	if reloc != null: end_seg = reloc["segment"]
 	if end_seg != null:
 		var seg_after_end: Variant = _absorb_chain(end_seg, end_pos)
-		if seg_after_end != null: _split_existing_segment(seg_after_end, end_pos)
-
-	var start_node := RoadGraph.get_or_create(start_pos)
-	var end_node := RoadGraph.get_or_create(end_pos)
+		if seg_after_end != null: end_node = _split_existing_segment(seg_after_end, end_pos)
+		
+	if start_node == null: start_node = RoadGraph.get_or_create(start_pos)
+	if end_node == null: end_node = RoadGraph.get_or_create(end_pos)
+	
 	_start_t_segment = null
 	_start_guide_dir = null
 	if start_node == end_node: return
-	
-	# Rebuild the curve using the exact snapped node positions.
-	# This guarantees the mesh perfectly aligns with the nodes (Fixes A1/A2/A3).
-	if is_s_curve:
-		curve = _build_s_curve(start_node.position, _p_mid1, _p_mid2, end_node.position)
-	else:
-		curve = _build_c_curve(start_node.position, _p_mid1, end_node.position)
 	
 	var length := curve.get_baked_length()
 	var target_step := road_type.lane_width * 16.0
@@ -714,7 +716,8 @@ func _absorb_chain(seg: Variant, pos: Vector3) -> Variant:
 		var w := _find_absorb_waypoint(current, pos)
 		if w == null: return current
 		var merged: Variant = _absorb_waypoint(w)
-		if merged == null: return null
+		# If merge fails (e.g. waypoint has >2 segments), return the original segment
+		if merged == null: return current 
 		current = merged
 	return current
 
@@ -741,8 +744,9 @@ func _absorb_waypoint(w: RoadNode) -> RoadSegment:
 	if not is_instance_valid(seg_a) or not is_instance_valid(seg_b): return null
 	
 	var a_is_start: bool = w.segment_ends[0]["is_start"]
-	var other_a: RoadNode = seg_a.end_node if a_is_start else seg_a.start_node
 	var b_is_start: bool = w.segment_ends[1]["is_start"]
+	
+	var other_a: RoadNode = seg_a.end_node if a_is_start else seg_a.start_node
 	var other_b: RoadNode = seg_b.end_node if b_is_start else seg_b.start_node
 	if other_a == null or other_b == null: return null
 	
@@ -750,13 +754,16 @@ func _absorb_waypoint(w: RoadNode) -> RoadSegment:
 	if seg_b.road_type != null:
 		if rt == null or seg_b.road_type.lane_count() > rt.lane_count(): rt = seg_b.road_type
 	
-	# Check if either segment actually has curvature (non-zero handles)
 	var is_curved := _segment_has_curve(seg_a) or _segment_has_curve(seg_b)
 	
 	var a_from_out := Vector3.ZERO
 	var a_to_in := Vector3.ZERO
 	var b_from_out := Vector3.ZERO
 	var b_to_in := Vector3.ZERO
+	
+	# Use the actual curve endpoints to preserve offsets
+	var p_start := seg_a.curve.get_point_position(seg_a.curve.point_count - 1) if a_is_start else seg_a.curve.get_point_position(0)
+	var p_end := seg_b.curve.get_point_position(seg_b.curve.point_count - 1) if b_is_start else seg_b.curve.get_point_position(0)
 	
 	if is_curved:
 		var a_info := _get_segment_handles(seg_a, other_a, w)
@@ -772,16 +779,13 @@ func _absorb_waypoint(w: RoadNode) -> RoadSegment:
 	RoadGraph.nodes.erase(w)
 	
 	if is_curved:
-		# Build a 3-point curve: other_a → w → other_b, preserving tangents.
-		# Then _split_existing_segment slices it at _p_start, effectively
-		# moving the waypoint smoothly to the new click position.
 		var curve := Curve3D.new()
-		curve.add_point(other_a.position, Vector3.ZERO, a_from_out)
+		curve.add_point(p_start, Vector3.ZERO, a_from_out)
 		curve.add_point(w_pos, a_to_in, b_from_out)
-		curve.add_point(other_b.position, b_to_in, Vector3.ZERO)
+		curve.add_point(p_end, b_to_in, Vector3.ZERO)
 		return _create_segment_with_curve(other_a, other_b, rt, curve)
 	
-	return _create_segment(other_a, other_b, rt)
+	return _create_segment_with_curve(other_a, other_b, rt, _two_point_curve(p_start, p_end))
 
 func _segment_has_curve(seg: RoadSegment) -> bool:
 	if seg.curve == null or seg.curve.point_count < 2: return false
@@ -864,8 +868,8 @@ func _rebuild_neighbours(node: RoadNode, exclude: RoadSegment) -> void:
 		if s == exclude: continue
 		if is_instance_valid(s): s.rebuild_mesh()
 
-func _split_existing_segment(seg: RoadSegment, at: Vector3) -> void:
-	if not is_instance_valid(seg): return
+func _split_existing_segment(seg: RoadSegment, at: Vector3) -> RoadNode:
+	if not is_instance_valid(seg): return null
 	var old_start := seg.start_node
 	var old_end := seg.end_node
 	var rt := seg.road_type
@@ -875,13 +879,15 @@ func _split_existing_segment(seg: RoadSegment, at: Vector3) -> void:
 	var split_point: Vector3 = res["point"]
 	var bake_dist: float = res["bake"]
 	
-	if bake_dist < 0.1 or bake_dist > length - 0.1: return
+	if bake_dist < 0.1: return old_start
+	if bake_dist > length - 0.1: return old_end
 	
 	_detach_and_remove(seg)
 	var mid := RoadGraph.get_or_create(split_point, false, true)
 	
 	_create_segment_with_curve(old_start, mid, rt, CurveMath.slice(seg.curve, 0, bake_dist))
 	_create_segment_with_curve(mid, old_end, rt, CurveMath.slice(seg.curve, bake_dist, length))
+	return mid
 
 func _detach_and_remove(seg: RoadSegment) -> void:
 	var sn := seg.start_node
@@ -1027,12 +1033,15 @@ func _move_click_pressed() -> void:
 			var seg = entry["segment"]
 			var is_start = entry["is_start"]
 			var last = seg.curve.point_count - 1
-			var other_node = seg.end_node if is_start else seg.start_node
+			
+			var curve_start = seg.curve.get_point_position(0) if is_start else seg.curve.get_point_position(last)
 			var handle_vec = seg.curve.get_point_out(0) if is_start else seg.curve.get_point_in(last)
 			if handle_vec.length_squared() < 0.01:
-				handle_vec = (other_node.position - _move_selected_node.position) / 3.0
+				var p_end = seg.curve.get_point_position(last)
+				var p_start = seg.curve.get_point_position(0)
+				handle_vec = (p_end - p_start) / 3.0 if is_start else (p_start - p_end) / 3.0
 				
-			var handle_pos = _move_selected_node.position + handle_vec
+			var handle_pos = curve_start + handle_vec
 			var to_h: Vector3 = handle_pos - ray_origin
 			var proj: float = to_h.dot(ray_dir)
 			if proj > 0 and (ray_origin + ray_dir * proj).distance_to(handle_pos) < 2.5:
@@ -1041,8 +1050,8 @@ func _move_click_pressed() -> void:
 	elif _move_selected_segment != null:
 		var seg = _move_selected_segment
 		var last = seg.curve.point_count - 1
-		var p0 = seg.start_node.position
-		var p3 = seg.end_node.position
+		var p0 = seg.curve.get_point_position(0)
+		var p3 = seg.curve.get_point_position(last)
 		var h_out = seg.curve.get_point_out(0)
 		var h_in = seg.curve.get_point_in(last)
 		if h_out.length_squared() < 0.01: h_out = (p3 - p0) / 3.0
@@ -1195,30 +1204,35 @@ func _move_drag_update() -> void:
 			var s = entry["segment"]
 			var is_start = entry["is_start"]
 			var last = s.curve.point_count - 1
+			
+			# Translate curve endpoints to preserve offsets
 			if is_start:
-				s.curve.set_point_position(0, new_pos)
+				var p = s.curve.get_point_position(0)
+				s.curve.set_point_position(0, p + delta)
 			else:
-				s.curve.set_point_position(last, new_pos)
+				var p = s.curve.get_point_position(last)
+				s.curve.set_point_position(last, p + delta)
+				
 			s.rebuild_mesh()
 			_rebuild_neighbours(s.start_node, s)
 			_rebuild_neighbours(s.end_node, s)
 		_update_move_gizmos()
 			
 	elif _move_drag_target == "handle":
-		var node_pos = _move_drag_segment.start_node.position if _move_drag_node_side else _move_drag_segment.end_node.position
 		var last = _move_drag_segment.curve.point_count - 1
+		var node_pos = _move_drag_segment.curve.get_point_position(0) if _move_drag_node_side else _move_drag_segment.curve.get_point_position(last)
 		var cur_handle = _move_drag_segment.curve.get_point_out(0) if _move_drag_node_side else _move_drag_segment.curve.get_point_in(last)
 		var length = cur_handle.length()
 		
 		if length < 0.1:
-			var other_node = _move_drag_segment.end_node if _move_drag_node_side else _move_drag_segment.start_node
-			length = node_pos.distance_to(other_node.position) / 3.0
-			cur_handle = (other_node.position - node_pos).normalized() * length
+			var p_end = _move_drag_segment.curve.get_point_position(last)
+			var p_start = _move_drag_segment.curve.get_point_position(0)
+			length = p_start.distance_to(p_end) / 3.0
+			cur_handle = (p_end - p_start).normalized() * length if _move_drag_node_side else (p_start - p_end).normalized() * length
 			
 		var dir = (hit - node_pos).normalized()
 		var new_handle = dir * length
 		
-		# Preserve Y slope for the dragged handle
 		var orig_xz = Vector2(cur_handle.x, cur_handle.z).length()
 		var orig_y = absf(cur_handle.y)
 		var target_xz = Vector2(new_handle.x, new_handle.z).length()
@@ -1242,15 +1256,14 @@ func _move_drag_update() -> void:
 				var o_len = o_handle.length()
 				
 				if o_len < 0.1:
-					var o_node_pos = other_seg.start_node.position if _move_drag_node_side else other_seg.end_node.position
-					var o_other = other_seg.end_node if _move_drag_node_side else other_seg.start_node
-					o_len = o_node_pos.distance_to(o_other.position) / 3.0
-					o_handle = (o_other.position - o_node_pos).normalized() * o_len
+					var o_p_end = other_seg.curve.get_point_position(o_last)
+					var o_p_start = other_seg.curve.get_point_position(0)
+					o_len = o_p_start.distance_to(o_p_end) / 3.0
+					o_handle = (o_p_end - o_p_start).normalized() * o_len if _move_drag_node_side else (o_p_start - o_p_end).normalized() * o_len
 				
 				var o_dir = -dir
 				var new_o_handle = o_dir * o_len
 				
-				# Preserve Y slope for the mirrored handle
 				var o_orig_xz = Vector2(o_handle.x, o_handle.z).length()
 				var o_orig_y = absf(o_handle.y)
 				var o_target_xz = Vector2(new_o_handle.x, new_o_handle.z).length()
@@ -1269,8 +1282,8 @@ func _move_drag_update() -> void:
 				
 	elif _move_drag_target == "segment":
 		var s = _move_drag_segment
-		var p0 = s.start_node.position
-		var p3 = s.end_node.position
+		var p0 = s.curve.get_point_position(0)
+		var p3 = s.curve.get_point_position(s.curve.point_count - 1)
 		var chord = p3 - p0
 		var chord_len = chord.length()
 		if chord_len < 0.1: return
@@ -1377,20 +1390,22 @@ func _update_move_gizmos() -> void:
 			var seg = entry["segment"]
 			var is_start = entry["is_start"]
 			var last = seg.curve.point_count - 1
-			var other_node = seg.end_node if is_start else seg.start_node
 			
+			var curve_start = seg.curve.get_point_position(0) if is_start else seg.curve.get_point_position(last)
 			var handle_vec = seg.curve.get_point_out(0) if is_start else seg.curve.get_point_in(last)
 			if handle_vec.length_squared() < 0.01:
-				handle_vec = (other_node.position - _move_selected_node.position) / 3.0
+				var p_end = seg.curve.get_point_position(last)
+				var p_start = seg.curve.get_point_position(0)
+				handle_vec = (p_end - p_start) / 3.0 if is_start else (p_start - p_end) / 3.0
 					
-			var handle_pos = _move_selected_node.position + handle_vec
+			var handle_pos = curve_start + handle_vec
 			_add_gizmo(handle_pos, Color.CYAN, 0.7)
-			_add_line_gizmo(_move_selected_node.position, handle_pos, Color.CYAN)
+			_add_line_gizmo(curve_start, handle_pos, Color.CYAN)
 				
 	elif _move_selected_segment != null:
 		var last = _move_selected_segment.curve.point_count - 1
-		var p0 = _move_selected_segment.start_node.position
-		var p3 = _move_selected_segment.end_node.position
+		var p0 = _move_selected_segment.curve.get_point_position(0)
+		var p3 = _move_selected_segment.curve.get_point_position(last)
 		_add_gizmo(p0, Color.GREEN, 1.0)
 		_add_gizmo(p3, Color.GREEN, 1.0)
 		
