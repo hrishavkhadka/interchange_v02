@@ -27,9 +27,6 @@ static func build_slab(curve: Curve3D, rt: RoadType, start_inset: float = 0.0, e
 		var pos := curve.sample_baked(offset)
 		pos.y += SURFACE_LIFT
 
-		# Centered-difference tangent. Well-defined at both ends. Falls back
-		# to forward or backward difference only if the two neighbours
-		# coincide, which only happens if the curve has zero length.
 		var prev_off: float = maxf(offset - DELTA, 0.0)
 		var next_off: float = minf(offset + DELTA, length)
 		var prev_p: Vector3 = curve.sample_baked(prev_off)
@@ -56,14 +53,24 @@ static func build_slab(curve: Curve3D, rt: RoadType, start_inset: float = 0.0, e
 		var t0 := tangents[i]
 		var t1 := tangents[i + 1]
 
-		var r0 := Vector3.UP.cross(t0)
-		var r1 := Vector3.UP.cross(t1)
-		if r0.length_squared() < 0.001:
-			r0 = Vector3.RIGHT
-		if r1.length_squared() < 0.001:
-			r1 = Vector3.RIGHT
+		# Flatten tangent to horizontal to prevent the road from twisting on slopes
+		var flat_t0 := Vector3(t0.x, 0.0, t0.z).normalized()
+		var flat_t1 := Vector3(t1.x, 0.0, t1.z).normalized()
+		if flat_t0.length_squared() < 0.001: flat_t0 = Vector3.FORWARD
+		if flat_t1.length_squared() < 0.001: flat_t1 = Vector3.FORWARD
+
+		var r0 := Vector3.UP.cross(flat_t0)
+		var r1 := Vector3.UP.cross(flat_t1)
+		if r0.length_squared() < 0.001: r0 = Vector3.RIGHT
+		if r1.length_squared() < 0.001: r1 = Vector3.RIGHT
 		r0 = r0.normalized()
 		r1 = r1.normalized()
+
+		# Calculate correct 3D normals for the slope
+		var n0 := r0.cross(t0).normalized()
+		var n1 := r1.cross(t1).normalized()
+		if n0.y < 0.0: n0 = -n0
+		if n1.y < 0.0: n1 = -n1
 
 		var l0 := p0 - r0 * half_width
 		var rr0 := p0 + r0 * half_width
@@ -73,12 +80,12 @@ static func build_slab(curve: Curve3D, rt: RoadType, start_inset: float = 0.0, e
 		var v0 := float(i) / float(samples)
 		var v1 := float(i + 1) / float(samples)
 
-		_vert(st, l0, Vector3.UP, Vector2(0.0, v0))
-		_vert(st, rr0, Vector3.UP, Vector2(1.0, v0))
-		_vert(st, l1, Vector3.UP, Vector2(0.0, v1))
-		_vert(st, rr0, Vector3.UP, Vector2(1.0, v0))
-		_vert(st, rr1, Vector3.UP, Vector2(1.0, v1))
-		_vert(st, l1, Vector3.UP, Vector2(0.0, v1))
+		_vert(st, l0, n0, Vector2(0.0, v0))
+		_vert(st, rr0, n0, Vector2(1.0, v0))
+		_vert(st, l1, n1, Vector2(0.0, v1))
+		_vert(st, rr0, n0, Vector2(1.0, v0))
+		_vert(st, rr1, n1, Vector2(1.0, v1))
+		_vert(st, l1, n1, Vector2(0.0, v1))
 
 	return st.commit()
 
