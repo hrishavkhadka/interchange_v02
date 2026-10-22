@@ -2,6 +2,22 @@
 
 Append-only log of every phase commit. **Newest entries at the top.**
 
+## 2026-10-22 — Phase 6 — Elevation (Bridges and Slopes)
+**Commit:** `<sha>` — `Phase 6 — Elevation (Bridges and Slopes)`
+**Files:** `scripts/build/road_builder.gd`, `scripts/build/build_settings.gd`, `scripts/ui/hud.gd`, `scripts/game/game_state.gd`, `scripts/core/road_ops.gd`, `scripts/core/road_segment.gd`, `scripts/core/road_node.gd`, `scripts/core/road_mesh.gd`, `scripts/sim/lane_graph.gd`, `docs/architecture.md`, `docs/decisions.md`, `docs/pitfalls.md`, `context.md`
+**Why:** The game needed 3D elevation to support bridges, sunken roads, and overpasses, a core requirement for traffic puzzles.
+**What:**
+- Added `_current_elevation` and keyboard controls (`PageUp/Down`, `Shift+W/S`) for building at different heights. Added step size to `BuildSettings`.
+- Enforced a 25% maximum grade for slopes in `RoadOps.is_placement_valid`.
+- Enforced a 5.0m vertical clearance for overlapping roads (bridges).
+- Updated `RoadSegment.cost()` to scale dynamically with average elevation.
+- Added procedural pillar generation under elevated nodes, with cleanup on deletion.
+- Fixed Move It tool to raycast correctly against 3D geometry, allowing selection and dragging of elevated nodes and segments.
+- Implemented CS2-style height snapping: hovering over an elevated node/segment automatically adopts its elevation.
+- Fixed tangent handle dragging to preserve Y-axis slopes (preventing wavy roads).
+- Fixed `RoadMesh` generation to prevent road slabs from twisting like propellers on slopes, and applied correct slope normals for lighting.
+**Tested:** Building elevated/sunken roads, bridging, grade limits, vertical clearance, Move It on elevated nodes, Alt-mirroring on sloped handles, save/load of elevated roads.
+**Follow-ups:** Junction mesh clipping on slopes (Phase 7), Traffic Lights, Signage.
 
 ## 2026-10-19 — Phase 5 — Curve-aware Lane Generation & Simulation
 **Commit:** `<sha>` — `Phase 5 — Curve-aware Lane Generation & Simulation`

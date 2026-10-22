@@ -151,3 +151,24 @@ Known traps. Read this before touching a subsystem. Add an entry whenever a bug 
 **Detected in:** Phase 5
 **Files:** `scripts/sim/lane_graph.gd`
 **Status:** fixed
+
+## Move It — Elevated node drag "shoots up" instantly
+**Cause:** `_start_move_drag` recorded the mouse hit on the `Y=0` ground plane, but the drag update used the node's elevated `Y` plane. The vertical gap caused a massive jump.
+**Fix:** The drag start now casts a ray to the node's exact `Y` plane before beginning the drag.
+**Detected in:** Phase 6
+**Files:** `scripts/build/road_builder.gd`
+**Status:** fixed
+
+## RoadMesh — Sloped roads twist and have flat lighting
+**Cause:** The width cross-product (`UP.cross(tangent)`) tilted on slopes, twisting the mesh. Also, `SurfaceTool` normals were hardcoded to `Vector3.UP`.
+**Fix:** Flatten the tangent to horizontal before the cross product. Calculate true slope normals via `right.cross(tangent)`.
+**Detected in:** Phase 6
+**Files:** `scripts/core/road_mesh.gd`
+**Status:** fixed
+
+## Move It — Dragging handles flattens slopes
+**Cause:** Raycasts for handle dragging hit the flat ground plane, forcing the handle into the XZ plane.
+**Fix:** Preserve the handle's original Y/XZ ratio and apply it to the new direction.
+**Detected in:** Phase 6
+**Files:** `scripts/build/road_builder.gd`
+**Status:** fixed

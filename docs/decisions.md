@@ -130,3 +130,10 @@ ADR-style log of non-obvious design choices. Each entry: what was decided, why, 
 **Decided:** `level_io.gd` serializes `Curve3D` as an array of control points and their `in`/`out` handles.
 **Why:** Sampling curves into polylines destroys tangent data, breaking Move It and waypoint absorption on reloaded levels.
 **Consequences:** Format version bumped to 2. A fallback is maintained for loading v1 (polyline) saves.
+
+---
+
+## ADR-013 — Elevation snapping adopts the target's height
+**Decided:** When hovering over an elevated node/segment with the road tool, the current build elevation automatically snaps to the target's elevation, rather than remaining on the ground plane.
+**Why:** Standard CS2 behavior. Allows connecting new roads to existing bridges without manually dialing in the exact height.
+**Consequences:** `_resolve_end` and `_start_drag` now mutate `_current_elevation` when snapping to a node/segment.

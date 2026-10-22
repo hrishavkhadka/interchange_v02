@@ -72,12 +72,11 @@ Levels are saved as JSON in `user://levels/`:
   - Entry/exit markers, demand matrix.
   - Save/load (F9/F10 quick save + named saves via buttons).
   - Curved road drawing (C-curves and S-curves) via multi-click placement + road shape sub-menu on the Road tool.
-- **In progress — curve roads (Phase 1/4 → 5/4)**:
-  - [x] **Phase 1/4 — Curve geometry & builder.**
-  - [x] **Phase 2/4 — Curve-aware hit detection.**
-  - [x] **Phase 3/4 — Curve-preserving split.**
-  - [x] **Phase 4/4 — Move It Tool & Save/Load.**
-  - [x] **Phase 5 — Curve-aware Lane Generation & Simulation.** Lane generation trims and offsets correctly based on `Curve3D` tangents.
+- **In progress — curve roads & elevation (Phase 1 → 6)**:
+  - [x] **Phase 1-5 — Curves, Split, Hit Detection, Move It, Lanes.**
+  - [x] **Phase 6 — Elevation.** Sloped roads, bridges, pillars, dynamic cost, 3D Move It, height snapping, correct mesh normals.
+  - [ ] **Phase 7 — Traffic Lights & Signage.** 
+  - [ ] **Phase 8 — Junction Mesh Polish.** (Fixing clipping on slopes)
 - **Known pending issues**: see `docs/pitfalls.md` (`Status: open` entries).
 
 ## 8. Workflow & Conventions
