@@ -76,7 +76,8 @@ static func find_lane_under_point(pos: Vector3) -> Variant:
 			continue
 		var res := _get_closest_point_on_curve(pos, lane.curve, lane.length)
 		var dist: float = res["dist"]
-		var half_w := lane.segment.road_type.lane_width * 0.5
+		# Increase tolerance to catch edge clicks (1 full lane width)
+		var half_w := lane.segment.road_type.lane_width 
 		if dist <= half_w and dist < best_dist:
 			best_dist = dist
 			best = { "lane": lane, "segment": lane.segment, "point": res["point"] }

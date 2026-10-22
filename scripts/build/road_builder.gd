@@ -244,14 +244,16 @@ func _click_end_straight() -> void:
 	
 	if _start_t_segment != null:
 		var seg_after_start: Variant = _absorb_chain(_start_t_segment, _p_start)
-		if seg_after_start != null: start_node = _split_existing_segment(seg_after_start, _p_start)
+		if seg_after_start != null: 
+			start_node = _split_existing_segment(seg_after_start, _p_start)
 		
 	var end_seg: Variant = null
 	var reloc: Variant = RoadOps.find_segment_under_point(_p_end)
 	if reloc != null: end_seg = reloc["segment"]
 	if end_seg != null:
 		var seg_after_end: Variant = _absorb_chain(end_seg, _p_end)
-		if seg_after_end != null: end_node = _split_existing_segment(seg_after_end, _p_end)
+		if seg_after_end != null: 
+			end_node = _split_existing_segment(seg_after_end, _p_end)
 		
 	if start_node == null: start_node = RoadGraph.get_or_create(_p_start)
 	if end_node == null: end_node = RoadGraph.get_or_create(_p_end)
@@ -987,8 +989,13 @@ func _is_placement_valid(start: Vector3, end: Vector3, t_start: Variant, t_end: 
 	var sharing := _sharing_nodes(start, end, t_targets)
 	var hw: float = road_type.total_width() * 0.5
 	var valid := RoadOps.is_placement_valid(start, end, curve, hw, t_targets, sharing)
-	if valid and _would_sharp_bend(start, end, t_start, t_end):
+	
+	# Only check sharp bend if we are NOT splitting an existing segment.
+	# If t_start is not null, we are connecting to the middle of a road, so
+	# the endpoint blocked check will always trigger incorrectly.
+	if valid and t_start == null and _would_sharp_bend(start, end, t_start, t_end):
 		valid = false
+		
 	if valid and curve != null:
 		var min_r := _get_min_radius(curve)
 		var req_r := hw + (1.5 * road_type.lane_width)
