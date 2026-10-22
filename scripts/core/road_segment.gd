@@ -155,7 +155,8 @@ func _build_node_pillar(node: RoadNode) -> void:
 	mesh_inst.material_override = mat
 	
 	mesh_inst.position = Vector3(node.position.x, node.position.y * 0.5, node.position.z)
-	get_tree().current_scene.add_child(mesh_inst)
+	# Add as a child of the segment instead of the scene root
+	add_child(mesh_inst)
 	node.pillar_instance = mesh_inst
 	
 static func clear_node_pillar(node: RoadNode) -> void:
