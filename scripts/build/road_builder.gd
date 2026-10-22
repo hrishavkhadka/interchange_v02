@@ -198,7 +198,13 @@ func _start_drag() -> void:
 	var r := SnapResolver.resolve_position(hit_raw, ray["origin"], ray["dir"], settings, road_type)
 	
 	_p_start = r["point"]
-	_p_start.y = _current_elevation
+	var kind: String = r["kind"]
+	if kind == "free" or kind == "guide":
+		_p_start.y = _current_elevation
+	else:
+		_current_elevation = _p_start.y
+		_update_elevation_display()
+		
 	_start_t_segment = r["t_segment"]
 	_start_guide_dir = r["guide_dir"] if r.has("guide_dir") else null
 	_end_t_segment = null
@@ -623,6 +629,11 @@ func _resolve_end(raw: Vector3, origin: Vector3, origin_t_seg: Variant, origin_g
 		
 	if kind == "free" or kind == "guide":
 		pos.y = _current_elevation
+	else:
+		# Snap to the object's actual height
+		_current_elevation = pos.y
+		_update_elevation_display()
+		
 	return { "point": pos, "kind": kind, "t_segment": t_seg, "direction_kind": dir_kind }
 	
 func _would_sharp_bend(start: Vector3, end: Vector3, start_t_segment: Variant, end_t_segment: Variant) -> bool:
@@ -1008,6 +1019,8 @@ func _move_click_pressed() -> void:
 	if hit_raw == null: return
 	var hit: Vector3 = hit_raw
 	var ray := _get_mouse_ray()
+	var ray_origin: Vector3 = ray["origin"]
+	var ray_dir: Vector3 = ray["dir"]
 	
 	if _move_selected_node != null:
 		for entry in _move_selected_node.segment_ends:
@@ -1020,9 +1033,9 @@ func _move_click_pressed() -> void:
 				handle_vec = (other_node.position - _move_selected_node.position) / 3.0
 				
 			var handle_pos = _move_selected_node.position + handle_vec
-			var to_h = handle_pos - ray["origin"]
-			var proj = to_h.dot(ray["dir"])
-			if proj > 0 and (ray["origin"] + ray["dir"] * proj).distance_to(handle_pos) < 2.5:
+			var to_h: Vector3 = handle_pos - ray_origin
+			var proj: float = to_h.dot(ray_dir)
+			if proj > 0 and (ray_origin + ray_dir * proj).distance_to(handle_pos) < 2.5:
 				_start_move_drag("handle", seg, is_start, hit)
 				return
 	elif _move_selected_segment != null:
@@ -1035,31 +1048,36 @@ func _move_click_pressed() -> void:
 		if h_out.length_squared() < 0.01: h_out = (p3 - p0) / 3.0
 		if h_in.length_squared() < 0.01: h_in = (p0 - p3) / 3.0
 		
-		var to_h1 = (p0 + h_out) - ray["origin"]
-		if to_h1.dot(ray["dir"]) > 0 and (ray["origin"] + ray["dir"] * to_h1.dot(ray["dir"])).distance_to(p0 + h_out) < 2.5:
+		var to_h1: Vector3 = (p0 + h_out) - ray_origin
+		var proj1: float = to_h1.dot(ray_dir)
+		if proj1 > 0 and (ray_origin + ray_dir * proj1).distance_to(p0 + h_out) < 2.5:
 			_start_move_drag("handle", seg, true, hit)
 			return
-		var to_h2 = (p3 + h_in) - ray["origin"]
-		if to_h2.dot(ray["dir"]) > 0 and (ray["origin"] + ray["dir"] * to_h2.dot(ray["dir"])).distance_to(p3 + h_in) < 2.5:
+		var to_h2: Vector3 = (p3 + h_in) - ray_origin
+		var proj2: float = to_h2.dot(ray_dir)
+		if proj2 > 0 and (ray_origin + ray_dir * proj2).distance_to(p3 + h_in) < 2.5:
 			_start_move_drag("handle", seg, false, hit)
 			return
 
 	if _move_selected_node != null:
-		var to_n = _move_selected_node.position - ray["origin"]
-		if to_n.dot(ray["dir"]) > 0 and (ray["origin"] + ray["dir"] * to_n.dot(ray["dir"])).distance_to(_move_selected_node.position) < 2.5:
+		var to_n: Vector3 = _move_selected_node.position - ray_origin
+		var proj_n: float = to_n.dot(ray_dir)
+		if proj_n > 0 and (ray_origin + ray_dir * proj_n).distance_to(_move_selected_node.position) < 2.5:
 			_start_move_drag("node", null, false, hit)
 			return
 		
 	if _move_selected_segment != null:
-		var to_n1 = _move_selected_segment.start_node.position - ray["origin"]
-		if to_n1.dot(ray["dir"]) > 0 and (ray["origin"] + ray["dir"] * to_n1.dot(ray["dir"])).distance_to(_move_selected_segment.start_node.position) < 2.5:
+		var to_n1: Vector3 = _move_selected_segment.start_node.position - ray_origin
+		var proj_n1: float = to_n1.dot(ray_dir)
+		if proj_n1 > 0 and (ray_origin + ray_dir * proj_n1).distance_to(_move_selected_segment.start_node.position) < 2.5:
 			_move_selected_node = _move_selected_segment.start_node
 			_move_selected_segment = null
 			_update_move_gizmos()
 			_start_move_drag("node", null, false, hit)
 			return
-		var to_n2 = _move_selected_segment.end_node.position - ray["origin"]
-		if to_n2.dot(ray["dir"]) > 0 and (ray["origin"] + ray["dir"] * to_n2.dot(ray["dir"])).distance_to(_move_selected_segment.end_node.position) < 2.5:
+		var to_n2: Vector3 = _move_selected_segment.end_node.position - ray_origin
+		var proj_n2: float = to_n2.dot(ray_dir)
+		if proj_n2 > 0 and (ray_origin + ray_dir * proj_n2).distance_to(_move_selected_segment.end_node.position) < 2.5:
 			_move_selected_node = _move_selected_segment.end_node
 			_move_selected_segment = null
 			_update_move_gizmos()
@@ -1074,10 +1092,10 @@ func _move_click_pressed() -> void:
 	var best_node = null
 	var best_d = 5.0
 	for n in RoadGraph.nodes:
-		var to_n = n.position - ray["origin"]
-		var proj = to_n.dot(ray["dir"])
+		var to_n: Vector3 = n.position - ray_origin
+		var proj: float = to_n.dot(ray_dir)
 		if proj > 0:
-			var d = (ray["origin"] + ray["dir"] * proj).distance_to(n.position)
+			var d: float = (ray_origin + ray_dir * proj).distance_to(n.position)
 			if d < best_d:
 				best_d = d
 				best_node = n
@@ -1088,9 +1106,24 @@ func _move_click_pressed() -> void:
 		_update_move_gizmos()
 		return
 		
-	var best_seg_res = RoadOps.find_nearest_segment(hit, 10.0)
-	if best_seg_res != null:
-		_move_selected_segment = best_seg_res["segment"]
+	var best_seg = null
+	var best_seg_dist = 10.0
+	for seg in RoadGraph.segments:
+		if seg.curve == null: continue
+		var L := seg.curve.get_baked_length()
+		var steps := maxi(8, int(L / 2.0))
+		for i in range(steps + 1):
+			var p: Vector3 = seg.curve.sample_baked((float(i)/steps) * L)
+			var to_p: Vector3 = p - ray_origin
+			var proj: float = to_p.dot(ray_dir)
+			if proj > 0:
+				var d: float = (ray_origin + ray_dir * proj).distance_to(p)
+				if d < best_seg_dist:
+					best_seg_dist = d
+					best_seg = seg
+					
+	if best_seg != null:
+		_move_selected_segment = best_seg
 		_move_selected_node = null
 		_update_move_gizmos()
 		return
@@ -1104,7 +1137,6 @@ func _start_move_drag(target_type: String, target_seg: RoadSegment, is_start: bo
 	_move_drag_target = target_type
 	_move_drag_segment = target_seg
 	_move_drag_node_side = is_start
-	_move_drag_start_mouse = mouse_hit
 	
 	_move_backup_curves.clear()
 	_move_backup_nodes.clear()
@@ -1112,6 +1144,17 @@ func _start_move_drag(target_type: String, target_seg: RoadSegment, is_start: bo
 	
 	if target_type == "node":
 		_move_drag_start_node_pos = _move_selected_node.position
+		# Record the mouse start on the node's exact Y plane, not the ground
+		var plane := Plane(Vector3.UP, _move_selected_node.position.y)
+		var cam := get_viewport().get_camera_3d()
+		var from := cam.project_ray_origin(get_viewport().get_mouse_position())
+		var dir := cam.project_ray_normal(get_viewport().get_mouse_position())
+		var hit_3d = plane.intersects_ray(from, dir)
+		if hit_3d != null:
+			_move_drag_start_mouse = hit_3d
+		else:
+			_move_drag_start_mouse = mouse_hit
+			
 		_move_backup_nodes[_move_selected_node] = _move_selected_node.position
 		for entry in _move_selected_node.segment_ends:
 			var s = entry["segment"]
@@ -1132,7 +1175,8 @@ func _start_move_drag(target_type: String, target_seg: RoadSegment, is_start: bo
 
 func _move_drag_update() -> void:
 	if not _move_is_dragging: return
-	var hit_raw: Variant = _ground_hit(_move_selected_node.position.y if _move_selected_node != null else 0.0)
+	var plane_y = _move_selected_node.position.y if _move_selected_node != null else 0.0
+	var hit_raw: Variant = _ground_hit(plane_y)
 	if hit_raw == null: return
 	var hit: Vector3 = hit_raw
 	
@@ -1141,7 +1185,6 @@ func _move_drag_update() -> void:
 		var new_pos = _move_drag_start_node_pos + delta
 		_move_selected_node.position = new_pos
 		
-		# Clear old pillars so they don't float in the air
 		for entry in _move_selected_node.segment_ends:
 			var s = entry["segment"]
 			RoadSegment.clear_node_pillar(_move_selected_node)
@@ -1160,9 +1203,8 @@ func _move_drag_update() -> void:
 			_rebuild_neighbours(s.start_node, s)
 			_rebuild_neighbours(s.end_node, s)
 		_update_move_gizmos()
-		
+			
 	elif _move_drag_target == "handle":
-		# ... (keep the rest of the handle and segment dragging logic exactly as you have it)
 		var node_pos = _move_drag_segment.start_node.position if _move_drag_node_side else _move_drag_segment.end_node.position
 		var last = _move_drag_segment.curve.point_count - 1
 		var cur_handle = _move_drag_segment.curve.get_point_out(0) if _move_drag_node_side else _move_drag_segment.curve.get_point_in(last)
@@ -1171,9 +1213,20 @@ func _move_drag_update() -> void:
 		if length < 0.1:
 			var other_node = _move_drag_segment.end_node if _move_drag_node_side else _move_drag_segment.start_node
 			length = node_pos.distance_to(other_node.position) / 3.0
+			cur_handle = (other_node.position - node_pos).normalized() * length
 			
 		var dir = (hit - node_pos).normalized()
 		var new_handle = dir * length
+		
+		# Preserve Y slope for the dragged handle
+		var orig_xz = Vector2(cur_handle.x, cur_handle.z).length()
+		var orig_y = absf(cur_handle.y)
+		var target_xz = Vector2(new_handle.x, new_handle.z).length()
+		if orig_xz > 0.01 and target_xz > 0.01:
+			var new_y = orig_y * (target_xz / orig_xz) * signf(cur_handle.y)
+			new_handle.y = new_y
+			
+		new_handle = new_handle.normalized() * length
 		
 		if _move_drag_node_side:
 			_move_drag_segment.curve.set_point_out(0, new_handle)
@@ -1187,15 +1240,30 @@ func _move_drag_update() -> void:
 				var o_last = other_seg.curve.point_count - 1
 				var o_handle = other_seg.curve.get_point_in(o_last) if _move_drag_node_side else other_seg.curve.get_point_out(0)
 				var o_len = o_handle.length()
+				
 				if o_len < 0.1:
 					var o_node_pos = other_seg.start_node.position if _move_drag_node_side else other_seg.end_node.position
 					var o_other = other_seg.end_node if _move_drag_node_side else other_seg.start_node
 					o_len = o_node_pos.distance_to(o_other.position) / 3.0
+					o_handle = (o_other.position - o_node_pos).normalized() * o_len
+				
 				var o_dir = -dir
+				var new_o_handle = o_dir * o_len
+				
+				# Preserve Y slope for the mirrored handle
+				var o_orig_xz = Vector2(o_handle.x, o_handle.z).length()
+				var o_orig_y = absf(o_handle.y)
+				var o_target_xz = Vector2(new_o_handle.x, new_o_handle.z).length()
+				if o_orig_xz > 0.01 and o_target_xz > 0.01:
+					var o_new_y = o_orig_y * (o_target_xz / o_orig_xz) * signf(o_handle.y)
+					new_o_handle.y = o_new_y
+				
+				new_o_handle = new_o_handle.normalized() * o_len
+				
 				if _move_drag_node_side:
-					other_seg.curve.set_point_in(o_last, o_dir * o_len)
+					other_seg.curve.set_point_in(o_last, new_o_handle)
 				else:
-					other_seg.curve.set_point_out(0, o_dir * o_len)
+					other_seg.curve.set_point_out(0, new_o_handle)
 				other_seg.rebuild_mesh()
 		_update_move_gizmos()
 				
@@ -1222,8 +1290,6 @@ func _move_drag_update() -> void:
 		var new_out = start_handles["out"] + h_offset
 		var new_in = start_handles["in"] + h_offset
 		
-		# Clamp handle magnitude to chord_len / 3.0 to mathematically
-		# guarantee the curve can never self-intersect or form a loop.
 		var max_h = chord_len / 3.0
 		if new_out.length() > max_h:
 			new_out = new_out.normalized() * max_h
