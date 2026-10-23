@@ -77,3 +77,36 @@ func node_by_id(nid: int) -> RoadNode:
 		if n.id == nid:
 			return n
 	return null
+
+func cleanup_duplicate_nodes() -> void:
+	var merged: bool = true
+	var safety: int = 0
+	while merged and safety < 10:
+		safety += 1
+		merged = false
+		var nodes_copy = nodes.duplicate()
+		for i in range(nodes_copy.size()):
+			var n1: RoadNode = nodes_copy[i]
+			if not is_instance_valid(n1): continue
+			for j in range(i + 1, nodes_copy.size()):
+				var n2: RoadNode = nodes_copy[j]
+				if not is_instance_valid(n2): continue
+				
+				# If nodes are within 1 meter, merge them
+				if n1.position.distance_to(n2.position) < 1.0:
+					merged = true
+					# Move n1 to the midpoint (or keep n1's centerline position)
+					for entry in n2.segment_ends:
+						var seg: RoadSegment = entry["segment"]
+						var is_start: bool = entry["is_start"]
+						# Re-point the segment to n1
+						if is_start: seg.start_node = n1
+						else: seg.end_node = n1
+						n1.add_segment_end(seg, is_start)
+					
+					n2.segment_ends.clear()
+					nodes.erase(n2)
+					break
+			if merged: break
+	if merged:
+		graph_changed.emit()

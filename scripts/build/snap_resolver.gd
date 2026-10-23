@@ -7,11 +7,13 @@ const ANGLE_TOLERANCE_DEG: float = 9.0
 const GUIDE_SNAP_RADIUS: float = 2.5
 
 static func resolve_position(raw: Vector3, ray_origin: Vector3, ray_dir: Vector3, settings: BuildSettings, road_type: RoadType) -> Dictionary:
+	# 1. Node Snap
 	if settings.snap_node:
 		var n := _find_snap_node_ray(ray_origin, ray_dir)
 		if n != null:
 			return { "point": n.position, "kind": "node", "t_segment": null, "guide_dir": null }
 
+	# 2. Lane Snap (Highest priority for roads)
 	if settings.snap_lane:
 		var l: Variant = RoadOps.find_lane_under_point(raw)
 		if l != null:
@@ -22,6 +24,7 @@ static func resolve_position(raw: Vector3, ray_origin: Vector3, ray_dir: Vector3
 					and p.distance_to(seg.end_node.position) > 1.0:
 				return { "point": p, "kind": "lane", "t_segment": seg, "guide_dir": null }
 
+	# 3. Segment Snap
 	if settings.snap_segment:
 		var s: Variant = RoadOps.find_segment_under_point(raw)
 		if s != null:
@@ -32,6 +35,7 @@ static func resolve_position(raw: Vector3, ray_origin: Vector3, ray_dir: Vector3
 					and p.distance_to(seg.end_node.position) > 1.0:
 				return { "point": p, "kind": "segment", "t_segment": seg, "bake_dist": b_d, "guide_dir": null }
 
+	# 4. Guide Snap
 	if settings.snap_guide and road_type != null:
 		var snap_ticks: bool = settings.snap_length
 		var gp: Variant = _try_guide_snap(raw, road_type.lane_width, snap_ticks)

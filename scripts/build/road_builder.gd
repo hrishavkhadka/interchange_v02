@@ -262,8 +262,27 @@ func _click_end_straight() -> void:
 	_start_guide_dir = null
 	if start_node == end_node: return
 	
-	_create_segment_with_curve(start_node, end_node, road_type, curve)
+	var length := curve.get_baked_length()
+	var target_step := road_type.lane_width * 16.0
+	var count := maxi(1, int(round(length / target_step)))
+	var actual_step := length / float(count)
+	
+	if count == 1:
+		_create_segment_with_curve(start_node, end_node, road_type, curve)
+	else:
+		var prev_node := start_node
+		for i in range(1, count + 1):
+			if i == count:
+				_create_segment_with_curve(prev_node, end_node, road_type, CurveMath.slice(curve, (i-1)*actual_step, length))
+			else:
+				var pos := curve.sample_baked(i * actual_step)
+				var mid := RoadGraph.get_or_create(pos, true, true)
+				_create_segment_with_curve(prev_node, mid, road_type, CurveMath.slice(curve, (i-1)*actual_step, i*actual_step))
+				prev_node = mid
+				
+	RoadGraph.cleanup_duplicate_nodes()
 	cost_changed.emit(total_cost())
+	_cleanup_degenerate_segments()
 
 func _click_curve_mid() -> void:
 	var hit_raw: Variant = _ground_hit(_current_elevation)
@@ -277,7 +296,7 @@ func _click_curve_mid() -> void:
 	_stage = BuildStage.CURVE_END
 
 func _click_curve_end() -> void:
-	var hit_raw: Variant = _ground_hit()
+	var hit_raw: Variant = _ground_hit(_current_elevation)
 	if hit_raw == null: return
 	var r := _resolve_end(hit_raw, _p_mid1, null, null)
 	_p_end = r["point"]
@@ -344,14 +363,16 @@ func _commit_curve_data(curve: Curve3D, start_pos: Vector3, end_pos: Vector3, t_
 	
 	if _start_t_segment != null:
 		var seg_after_start: Variant = _absorb_chain(_start_t_segment, start_pos)
-		if seg_after_start != null: start_node = _split_existing_segment(seg_after_start, start_pos)
+		if seg_after_start != null: 
+			start_node = _split_existing_segment(seg_after_start, start_pos)
 		
 	var end_seg: Variant = null
 	var reloc: Variant = RoadOps.find_segment_under_point(end_pos)
 	if reloc != null: end_seg = reloc["segment"]
 	if end_seg != null:
 		var seg_after_end: Variant = _absorb_chain(end_seg, end_pos)
-		if seg_after_end != null: end_node = _split_existing_segment(seg_after_end, end_pos)
+		if seg_after_end != null: 
+			end_node = _split_existing_segment(seg_after_end, end_pos)
 		
 	if start_node == null: start_node = RoadGraph.get_or_create(start_pos)
 	if end_node == null: end_node = RoadGraph.get_or_create(end_pos)
@@ -359,6 +380,12 @@ func _commit_curve_data(curve: Curve3D, start_pos: Vector3, end_pos: Vector3, t_
 	_start_t_segment = null
 	_start_guide_dir = null
 	if start_node == end_node: return
+	
+	# Rebuild the curve using the exact snapped mouse positions, NOT the node center.
+	if is_s_curve:
+		curve = _build_s_curve(start_pos, _p_mid1, _p_mid2, end_pos)
+	else:
+		curve = _build_c_curve(start_pos, _p_mid1, end_pos)
 	
 	var length := curve.get_baked_length()
 	var target_step := road_type.lane_width * 16.0
@@ -378,6 +405,7 @@ func _commit_curve_data(curve: Curve3D, start_pos: Vector3, end_pos: Vector3, t_
 				_create_segment_with_curve(prev_node, mid, road_type, CurveMath.slice(curve, (i-1)*actual_step, i*actual_step))
 				prev_node = mid
 				
+	RoadGraph.cleanup_duplicate_nodes()
 	cost_changed.emit(total_cost())
 	_cleanup_degenerate_segments()
 
@@ -878,11 +906,13 @@ func _split_existing_segment(seg: RoadSegment, at: Vector3) -> RoadNode:
 	
 	var length := seg.curve.get_baked_length()
 	var res := RoadOps._get_closest_point_on_curve(at, seg.curve, length)
-	var split_point: Vector3 = res["point"]
 	var bake_dist: float = res["bake"]
 	
 	if bake_dist < 0.1: return old_start
 	if bake_dist > length - 0.1: return old_end
+	
+	# FORCE the split point to be on the centerline
+	var split_point: Vector3 = seg.curve.sample_baked(bake_dist)
 	
 	_detach_and_remove(seg)
 	var mid := RoadGraph.get_or_create(split_point, false, true)
@@ -991,8 +1021,6 @@ func _is_placement_valid(start: Vector3, end: Vector3, t_start: Variant, t_end: 
 	var valid := RoadOps.is_placement_valid(start, end, curve, hw, t_targets, sharing)
 	
 	# Only check sharp bend if we are NOT splitting an existing segment.
-	# If t_start is not null, we are connecting to the middle of a road, so
-	# the endpoint blocked check will always trigger incorrectly.
 	if valid and t_start == null and _would_sharp_bend(start, end, t_start, t_end):
 		valid = false
 		

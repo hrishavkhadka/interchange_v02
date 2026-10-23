@@ -30,8 +30,8 @@ func _rebuild() -> void:
 			continue
 		if seg.start_node == null or seg.end_node == null:
 			continue
-		var start_trim: float = trims.get(seg.start_node.id, 0.0)
-		var end_trim: float = trims.get(seg.end_node.id, 0.0)
+		var start_trim: float = trims.get("%d_%d" % [seg.start_node.id, seg.uid], 0.0)
+		var end_trim: float = trims.get("%d_%d" % [seg.end_node.id, seg.uid], 0.0)
 		var layout: LaneLayout = seg.road_type.layout()
 		for i in layout.size():
 			var dir: String = layout.lanes[i]
@@ -52,56 +52,58 @@ func _compute_node_trims() -> Dictionary:
 	for node in RoadGraph.nodes:
 		var ends: Array = node.segment_ends
 		if ends.size() < 2:
-			trims[node.id] = 0.0
 			continue
-		var min_angle: float = PI
-		for i in ends.size():
-			for j in range(i + 1, ends.size()):
-				var e1: Dictionary = ends[i]
-				var e2: Dictionary = ends[j]
-				var s1: RoadSegment = e1["segment"]
+		
+		for e1 in ends:
+			var s1: RoadSegment = e1["segment"]
+			var d1: Vector3 = _outward_dir(s1, e1["is_start"], node)
+			
+			var max_angle: float = 0.0
+			for e2 in ends:
+				if e1 == e2: continue
 				var s2: RoadSegment = e2["segment"]
-				var d1: Vector3 = _outward_dir(s1, e1["is_start"], node)
 				var d2: Vector3 = _outward_dir(s2, e2["is_start"], node)
-				if d1.length_squared() < 0.01 or d2.length_squared() < 0.01:
-					continue
+				
 				var ang: float = d1.angle_to(d2)
-				if ang < min_angle:
-					min_angle = ang
-		var factor: float = LaneBuilder.trim_factor_for_angle(min_angle)
-		var max_half_width: float = 0.0
-		for e in ends:
-			var s: RoadSegment = e["segment"]
-			if s.road_type == null:
-				continue
-			var hw: float = s.road_type.total_width() * 0.5
-			if hw > max_half_width:
-				max_half_width = hw
-		trims[node.id] = factor * max_half_width
+				if ang > max_angle:
+					max_angle = ang
+					
+			var interior_angle: float = PI - max_angle
+			var factor: float = LaneBuilder.trim_factor_for_angle(interior_angle)
+			
+			# Find the widest road at this node to ensure the junction is big enough for all lanes
+			var max_hw: float = 0.0
+			for e3 in ends:
+				var s3: RoadSegment = e3["segment"]
+				if s3.road_type != null:
+					var hw: float = s3.road_type.total_width() * 0.5
+					if hw > max_hw: max_hw = hw
+					
+			var key: String = "%d_%d" % [node.id, s1.uid]
+			trims[key] = factor * max_hw
+			
 	return trims
 
 static func _outward_dir(seg: RoadSegment, is_start: bool, node: RoadNode) -> Vector3:
 	if seg.curve == null: return Vector3.ZERO
 	var L := seg.curve.get_baked_length()
 	if L < 0.1: return Vector3.ZERO
-	var eps := 0.1
-	var d: Vector3
 	
-	# Use the actual curve tangent instead of the straight chord
+	# Get the pure forward tangent of the curve, ignoring the offset
+	var t: Vector3
 	if is_start:
-		d = seg.curve.sample_baked(minf(eps, L)) - node.position
+		t = seg.curve.sample_baked(minf(0.1, L)) - seg.curve.sample_baked(0.0)
 	else:
-		d = seg.curve.sample_baked(maxf(0.0, L - eps)) - node.position
+		t = seg.curve.sample_baked(L) - seg.curve.sample_baked(maxf(0.0, L - 0.1))
 		
-	d.y = 0.0
-	if d.length_squared() < 0.01:
-		# Fallback to chord if curve tangent fails
-		var other = seg.end_node if is_start else seg.start_node
-		if other == null: return Vector3.ZERO
-		d = other.position - node.position
-		d.y = 0.0
-		
-	return d.normalized()
+	t.y = 0.0
+	t = t.normalized()
+	
+	# Outward direction points AWAY from the segment towards the junction center
+	if is_start:
+		return -t
+	else:
+		return t
 
 func _make_lane(seg: RoadSegment, lane_index: int, direction: String, start_trim: float, end_trim: float) -> Lane:
 	var curve := LaneBuilder.build_lane_curve(seg.curve, seg.road_type, lane_index, direction, start_trim, end_trim)
@@ -183,18 +185,28 @@ func _make_transition(from_lane: Lane, to_lane: Lane) -> Curve3D:
 		straight.add_point(start_p)
 		straight.add_point(end_p)
 		return straight
+		
 	var start_t: Vector3 = _end_tangent(from_lane.curve, from_lane.length)
 	var end_t: Vector3 = _start_tangent(to_lane.curve)
+	
+	# If the lanes point in opposite directions, don't draw a loop.
+	# Return a zero-length curve so the arc builder disables it.
+	if start_t.dot(end_t) < -0.5:
+		return null
+		
+	# If the lanes are roughly parallel and pointing the same way, 
+	# just use a straight line to avoid S-curves and loops.
+	if start_t.dot(end_t) > 0.9:
+		var straight := Curve3D.new()
+		straight.add_point(start_p)
+		straight.add_point(end_p)
+		return straight
+		
 	var handle_len: float = dist / 3.0
 	var p1: Vector3 = start_p + start_t * handle_len
 	var p2: Vector3 = end_p - end_t * handle_len
 	var samples: int = maxi(6, int(dist * 1.5))
 	var curve := Curve3D.new()
-	if debug_lane_arcs:
-		var turn_deg: float = rad_to_deg(start_t.angle_to(end_t))
-		if turn_deg > 90.0:
-			print("[transition] sharp turn %.1f deg, from lane %d to lane %d, dist %.2f" % [
-				turn_deg, from_lane.lane_index, to_lane.lane_index, dist])
 	for i in range(samples + 1):
 		var t: float = float(i) / float(samples)
 		curve.add_point(_bezier3(start_p, p1, p2, end_p, t))

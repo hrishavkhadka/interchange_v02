@@ -92,12 +92,11 @@ static func is_placement_valid(
 	if start.distance_to(end) < 0.5:
 		return false
 		
-	# Check Grade (slope)
 	var dist_xz := Vector2(end.x - start.x, end.z - start.z).length()
 	var dy := absf(end.y - start.y)
 	if dist_xz > 0.1:
 		var grade := dy / dist_xz
-		if grade > 0.25: # Max 25% grade
+		if grade > 0.25:
 			return false
 	
 	var new_length := new_curve.get_baked_length()
@@ -120,11 +119,11 @@ static func is_placement_valid(
 				var b0 := seg.curve.sample_baked((float(j)/steps) * length)
 				var b1 := seg.curve.sample_baked((float(j+1)/steps) * length)
 				
-				# Check vertical clearance (5.0m)
 				var dy_clearance := absf(a0.y - b0.y)
 				if dy_clearance < 5.0:
 					var d := _seg_seg_min_dist_2d(Vector2(a0.x, a0.z), Vector2(a1.x, a1.z), Vector2(b0.x, b0.z), Vector2(b1.x, b1.z))
-					if d < new_half_width + b_hw - 0.01:
+					# Allow up to 1m of visual overlap for side-by-side lanes
+					if d < new_half_width + b_hw - 1.0:
 						return false
 	return true
 
