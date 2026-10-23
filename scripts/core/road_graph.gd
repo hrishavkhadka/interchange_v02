@@ -92,14 +92,12 @@ func cleanup_duplicate_nodes() -> void:
 				var n2: RoadNode = nodes_copy[j]
 				if not is_instance_valid(n2): continue
 				
-				# If nodes are within 1 meter, merge them
-				if n1.position.distance_to(n2.position) < 1.0:
+				# Only merge if they are almost exactly on top of each other (0.5m)
+				if n1.position.distance_to(n2.position) < 0.5:
 					merged = true
-					# Move n1 to the midpoint (or keep n1's centerline position)
 					for entry in n2.segment_ends:
 						var seg: RoadSegment = entry["segment"]
 						var is_start: bool = entry["is_start"]
-						# Re-point the segment to n1
 						if is_start: seg.start_node = n1
 						else: seg.end_node = n1
 						n1.add_segment_end(seg, is_start)

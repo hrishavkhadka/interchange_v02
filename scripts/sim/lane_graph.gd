@@ -16,6 +16,7 @@ func _ready() -> void:
 	ArcOverrides.overrides_changed.connect(_rebuild)
 
 func _rebuild() -> void:
+	RoadGraph.cleanup_duplicate_nodes()
 	ArcOverrides.refresh_indices()
 	lanes.clear()
 	arcs.clear()
@@ -71,7 +72,6 @@ func _compute_node_trims() -> Dictionary:
 			var interior_angle: float = PI - max_angle
 			var factor: float = LaneBuilder.trim_factor_for_angle(interior_angle)
 			
-			# Find the widest road at this node to ensure the junction is big enough for all lanes
 			var max_hw: float = 0.0
 			for e3 in ends:
 				var s3: RoadSegment = e3["segment"]

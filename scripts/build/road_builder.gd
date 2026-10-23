@@ -262,24 +262,8 @@ func _click_end_straight() -> void:
 	_start_guide_dir = null
 	if start_node == end_node: return
 	
-	var length := curve.get_baked_length()
-	var target_step := road_type.lane_width * 16.0
-	var count := maxi(1, int(round(length / target_step)))
-	var actual_step := length / float(count)
-	
-	if count == 1:
-		_create_segment_with_curve(start_node, end_node, road_type, curve)
-	else:
-		var prev_node := start_node
-		for i in range(1, count + 1):
-			if i == count:
-				_create_segment_with_curve(prev_node, end_node, road_type, CurveMath.slice(curve, (i-1)*actual_step, length))
-			else:
-				var pos := curve.sample_baked(i * actual_step)
-				var mid := RoadGraph.get_or_create(pos, true, true)
-				_create_segment_with_curve(prev_node, mid, road_type, CurveMath.slice(curve, (i-1)*actual_step, i*actual_step))
-				prev_node = mid
-				
+	# Create the segment using the original _p_start and _p_end (the offset positions)
+	_create_segment_with_curve(start_node, end_node, road_type, curve)
 	RoadGraph.cleanup_duplicate_nodes()
 	cost_changed.emit(total_cost())
 	_cleanup_degenerate_segments()
@@ -906,17 +890,18 @@ func _split_existing_segment(seg: RoadSegment, at: Vector3) -> RoadNode:
 	
 	var length := seg.curve.get_baked_length()
 	var res := RoadOps._get_closest_point_on_curve(at, seg.curve, length)
+	var split_point: Vector3 = res["point"]
 	var bake_dist: float = res["bake"]
 	
 	if bake_dist < 0.1: return old_start
 	if bake_dist > length - 0.1: return old_end
 	
-	# FORCE the split point to be on the centerline
-	var split_point: Vector3 = seg.curve.sample_baked(bake_dist)
-	
 	_detach_and_remove(seg)
+	
+	# Place the new node exactly where you clicked (the offset)
 	var mid := RoadGraph.get_or_create(split_point, false, true)
 	
+	# Slice the curve
 	_create_segment_with_curve(old_start, mid, rt, CurveMath.slice(seg.curve, 0, bake_dist))
 	_create_segment_with_curve(mid, old_end, rt, CurveMath.slice(seg.curve, bake_dist, length))
 	return mid
